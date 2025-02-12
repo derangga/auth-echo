@@ -2,6 +2,7 @@ package app_context
 
 import (
 	"auth-echo/lib/secret"
+	"auth-echo/model/requests"
 	"context"
 	"errors"
 )
@@ -9,6 +10,7 @@ import (
 type contextKey string
 
 const UserContextKey contextKey = "UserContextKey"
+const RefreshTokenContextKey contextKey = "RefreshTokenContextKey"
 
 func GetUserClaims(ctx context.Context) (secret.TokenClaims, error) {
 	claims, ok := ctx.Value(UserContextKey).(secret.TokenClaims)
@@ -18,10 +20,23 @@ func GetUserClaims(ctx context.Context) (secret.TokenClaims, error) {
 	return claims, nil
 }
 
+func GetRefreshTokenMeta(ctx context.Context) (requests.RefreshTokenReq, error) {
+	req, ok := ctx.Value(RefreshTokenContextKey).(requests.RefreshTokenReq)
+	if !ok {
+		return requests.RefreshTokenReq{}, errors.New("meta data not found")
+	}
+
+	return req, nil
+}
+
 func SetUserIDContext(ctx context.Context, id int) context.Context {
 	return context.WithValue(ctx, UserContextKey, id)
 }
 
 func SetUserClaims(ctx context.Context, claims secret.TokenClaims) context.Context {
 	return context.WithValue(ctx, UserContextKey, claims)
+}
+
+func SetRefreshTokenRequest(ctx context.Context, rt requests.RefreshTokenReq) context.Context {
+	return context.WithValue(ctx, RefreshTokenContextKey, rt)
 }

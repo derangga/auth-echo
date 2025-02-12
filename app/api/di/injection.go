@@ -25,11 +25,16 @@ func provideUserRepository(db *sqlx.DB) repository.UserRepository {
 	return repository.NewUserRepository(db)
 }
 
+func provideSessionRepository(db *sqlx.DB) repository.SessionRepository {
+	return repository.NewSessionRepository(db)
+}
+
 func provideAuthUsecase(
-	config config.AuthConfig, 
+	config config.AuthConfig,
 	userRepository repository.UserRepository,
+	sessionRepository repository.SessionRepository,
 ) usecase.AuthUsecase {
-	return usecase.NewAuthUsecase(config, userRepository)
+	return usecase.NewAuthUsecase(config, userRepository, sessionRepository)
 }
 
 func provideAuthHandler(
@@ -73,7 +78,8 @@ func InitHttpServer(config *config.Config) server.HttpServer {
 	validator := provideValidator()
 	jwtAuth := provideJWTAuth(&config.AuthConfig)
 	userRepository := provideUserRepository(database)
-	authUC := provideAuthUsecase(config.AuthConfig, userRepository)
+	sessionRepository := provideSessionRepository(database)
+	authUC := provideAuthUsecase(config.AuthConfig, userRepository, sessionRepository)
 	authHandler := provideAuthHandler(authUC, validator)
 	healthzHandler := provideHealthzHandler()
 	handlers := provideHandlers(authHandler, healthzHandler)

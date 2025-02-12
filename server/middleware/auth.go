@@ -3,11 +3,12 @@ package middleware
 import (
 	appctx "auth-echo/lib/app_context"
 	"auth-echo/lib/secret"
+	"auth-echo/model/requests"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
 
@@ -40,29 +41,6 @@ func (m *JWTAuth) extractToken(c echo.Context) (string, error) {
 	return tokenString, nil
 }
 
-func (m *JWTAuth) VerifyToken(tokenString string) (*secret.TokenClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &secret.TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		// Check the signing method
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return secret.TokenClaims{}, m.tokenError("invalid token signing method")
-		}
-
-		// Return the secret key
-		return []byte(m.SigningKey), nil
-	})
-	
-	if err != nil || !token.Valid {
-		return nil, m.tokenError("invalid token")
-	}
-
-	claims, ok := token.Claims.(*secret.TokenClaims)
-	if !ok {
-		return nil, m.tokenError("invalid token claims")
-	}
-
-	return claims, nil
-}
-
 func (m *JWTAuth) UserMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -71,12 +49,9 @@ func (m *JWTAuth) UserMiddleware() echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 
-			claims, err := m.VerifyToken(tokenString)
+			claims, err := secret.VerifyJWTToken(tokenString, m.SigningKey)
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
-			}
-			if claims.GrantType != secret.AccessToken {
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 			}
 
 			newCtx := appctx.SetUserClaims(c.Request().Context(), *claims)
@@ -96,15 +71,27 @@ func (m *JWTAuth) ReAuthMiddleware() echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 
-			claims, err := m.VerifyToken(tokenString)
-			if err != nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
+			uid := c.Request().Header.Get("X-User-ID")
+			if uid == "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "Unknown user")
 			}
-			if claims.GrantType != secret.RefreshToken {
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+			userId, err := strconv.Atoi(uid)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "Unknown user")
 			}
 
-			newCtx := appctx.SetUserClaims(c.Request().Context(), *claims)
+			deviceId := c.Request().Header.Get("X-Device-ID")
+			if deviceId == "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "Unknown Device Identity")
+			}
+
+			req := requests.RefreshTokenReq{
+				RefreshToken: tokenString,
+				UserId:       userId,
+				DeviceId:     deviceId,
+			}
+
+			newCtx := appctx.SetRefreshTokenRequest(c.Request().Context(), req)
 			c.SetRequest(c.Request().WithContext(newCtx))
 
 			// Call the next handler in the chain

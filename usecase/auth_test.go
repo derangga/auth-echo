@@ -28,7 +28,7 @@ func newAuthTestAccessor(ctrl *gomock.Controller) AuthTestAccessor {
 	authConfig := config.AuthConfig{
 		JWTSecret: "test",
 		JWTValidDuration: jwtTime,
-		JWTRefreshDuration: jwtTime,
+		RefreshDuration: jwtTime,
 		BcryptSalt: 8,
 	}
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)

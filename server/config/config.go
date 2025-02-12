@@ -33,8 +33,9 @@ type DatabaseConfig struct {
 // AuthConfig holds the configuration for auth
 type AuthConfig struct {
 	JWTSecret        string 
+	RefreshTokenSecret string
 	JWTValidDuration time.Duration
-	JWTRefreshDuration time.Duration
+	RefreshDuration time.Duration
 	BcryptSalt       int
 }
 
@@ -70,7 +71,8 @@ func BuildConfig() *Config {
 		config.AuthConfig = AuthConfig{
 			JWTSecret: helper.GetStringEnv("JWT_SECRET", ""),
 			JWTValidDuration: helper.GetDurationEnv("JWT_VALID_DURATION", ""),
-			JWTRefreshDuration: helper.GetDurationEnv("JWT_REFRESH_VALID_DURATION", ""),
+			RefreshTokenSecret: helper.GetStringEnv("REFRESH_TOKEN_SECRET", ""),
+			RefreshDuration: helper.GetDurationEnv("REFRESH_VALID_DURATION", ""),
 			BcryptSalt: helper.GetIntEnv("BCRYPT_SALT", 0),
 		}
 	})
