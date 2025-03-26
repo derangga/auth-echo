@@ -4,9 +4,11 @@ import (
 	appctx "auth-echo/lib/app_context"
 	customerror "auth-echo/lib/custom_error"
 	"auth-echo/lib/responder"
+	"auth-echo/model/dto"
 	"auth-echo/model/requests"
 	"auth-echo/model/serializer"
 	"auth-echo/usecase"
+	"net"
 	"strconv"
 
 	"github.com/go-playground/validator/v10"
@@ -42,14 +44,29 @@ func (h AuthHandler) Login(c echo.Context) error {
 	if deviceId == "" {
 		return responder.ResponseBadRequest(c, "Unknown Device Identity")
 	}
+
 	err = h.validator.Struct(req)
 	if err != nil {
 		log.Errorf("AuthHandler.validateStruct: %w", err)
 		return responder.ResponseBadRequest(c, "")
 	}
 
+	userAgent := c.Request().UserAgent()
+	ipAddress, _, err := net.SplitHostPort(c.Request().RemoteAddr)
+	if err != nil {
+		log.Errorf("AuthHandler.getIpAddr: %w", err)
+		return responder.ResponseBadRequest(c, "")
+	}
+	loginDTO := dto.Login{
+		Username:       req.Username,
+		Password:       req.Password,
+		DeviceIdentity: deviceId,
+		UserAgent:      userAgent,
+		IPAddress:      net.IP(ipAddress),
+	}
+
 	// proceed to usecase
-	authorization, err := h.authUC.Login(c.Request().Context(), req, deviceId)
+	authorization, err := h.authUC.Login(c.Request().Context(), loginDTO)
 	if err != nil {
 		return responder.ResponseUnprocessableEntity(c, err.Error())
 	}
@@ -82,13 +99,25 @@ func (h AuthHandler) Register(c echo.Context) error {
 }
 
 func (h AuthHandler) RenewalToken(c echo.Context) error {
-	userMeta, err := appctx.GetRefreshTokenMeta(c.Request().Context())
+	headerReq, err := appctx.GetRefreshTokenMeta(c.Request().Context())
 	if err != nil {
 		return responder.ResponseUnauthorize(c, "")
 	}
 
-	authorization, err := h.authUC.RenewalToken(c.Request().Context(), userMeta)
+	var req requests.RefreshTokenBodyReq
+	err = c.Bind(&req)
 	if err != nil {
+		return responder.ResponseBadRequest(c, "")
+	}
+
+	authorization, err := h.authUC.RenewalToken(c.Request().Context(), headerReq, req)
+	if err != nil {
+		if ce, ok := err.(customerror.CustomError); ok {
+			return responder.BuildResponse(c, responder.Response{
+				Message:    ce.Error(),
+				HTTPStatus: ce.HTTPCode,
+			})
+		}
 		return responder.ResponseUnprocessableEntity(c, "")
 	}
 

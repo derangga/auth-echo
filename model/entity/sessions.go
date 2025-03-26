@@ -1,17 +1,35 @@
 package entity
 
 import (
-	"database/sql"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Session struct {
-	ID           int          `db:"id"`
-	UserID       int          `db:"user_id"`
-	RefreshToken string       `db:"refresh_token"`
-	DeviceID     string       `db:"device_id"`
-	ExpiresAt    time.Time    `db:"expires_at"`
-	CreatedAt    time.Time    `db:"created_at"`
-	UpdatedAt    sql.NullTime `db:"updated_at"`
-	DeletedAt    sql.NullTime `db:"deleted_at"`
+	ID           uuid.UUID  `db:"id"`
+	UserID       int        `db:"user_id"`
+	RefreshToken string     `db:"refresh_token"`
+	TokenFamily  uuid.UUID  `db:"token_family"`
+	ExpiresAt    time.Time  `db:"expires_at"`
+	CreatedAt    time.Time  `db:"created_at"`
+	RevokedAt    *time.Time `db:"revoked_at"`
+}
+
+type SessionWithUser struct {
+	ID           uuid.UUID  `db:"id"`
+	UserID       int        `db:"user_id"`
+	Role         string     `db:"role"`
+	RefreshToken string     `db:"refresh_token"`
+	TokenFamily  uuid.UUID  `db:"token_family"`
+	ExpiresAt    time.Time  `db:"expires_at"`
+	CreatedAt    time.Time  `db:"created_at"`
+	RevokedAt    *time.Time `db:"revoked_at"`
+}
+
+func (u SessionWithUser) RoleToEnum() Role {
+	if u.Role == "admin" {
+		return ADMIN
+	}
+	return USER
 }

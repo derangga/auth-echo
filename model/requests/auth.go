@@ -22,8 +22,12 @@ type Login struct {
 	Password string `json:"password" validate:"required,min=8,max=100"`
 }
 
-type RefreshTokenReq struct {
-	RefreshToken string
-	UserId       int
-	DeviceId     string
+type RefreshTokenHeaderReq struct {
+	SessionId string
+	UserId    int
+	DeviceId  string
+}
+
+type RefreshTokenBodyReq struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
 }

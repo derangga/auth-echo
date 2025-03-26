@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func VerifyJWTToken(tokenString, signingKey string) (*TokenClaims, error) {
@@ -16,7 +17,6 @@ func VerifyJWTToken(tokenString, signingKey string) (*TokenClaims, error) {
 		// Return the secret key
 		return []byte(signingKey), nil
 	})
-	
 	if err != nil || !token.Valid {
 		return nil, errors.New("invalid token")
 	}
@@ -29,16 +29,28 @@ func VerifyJWTToken(tokenString, signingKey string) (*TokenClaims, error) {
 	return claims, nil
 }
 
-func VerifyRefreshToken(signedToken, secretKey string) bool {
-	parts := len(signedToken) - 44 // Signature length in Base64
-	if parts <= 0 {
-		return false
-	}
-	token := signedToken[:parts-1]
-	expectedSignature, err := signToken(token, secretKey)
-	if err != nil  {
-		return false
+func VerifyWithoutValidateExp(tokenString, signingKey string) (jwt.MapClaims, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Check the signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return TokenClaims{}, errors.New("invalid token signing method")
+		}
+
+		// Return the secret key
+		return []byte(signingKey), nil
+	})
+	if err != nil {
+		return nil, errors.New("invalid token")
 	}
 
-	return signedToken == expectedSignature
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
+
+	return claims, nil
+}
+
+func VerifyRefreshToken(storedHash, rawToken string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(rawToken)) == nil
 }

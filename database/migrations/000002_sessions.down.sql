@@ -1,7 +1,5 @@
 begin;
 
-drop table if exists sessions;
-drop index idx_sessions_user ON sessions;
-drop index idx_sessions_device ON sessions;
+DROP TABLE IF EXISTS user_sessions;
 
 commit;

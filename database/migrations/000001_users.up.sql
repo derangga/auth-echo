@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS users(
   "name" VARCHAR(100),
   "password" VARCHAR(100),
   role user_role,
-  created_at TIMESTAMP default NOW(),
-  updated_at TIMESTAMP,
-  deleted_at TIMESTAMP
+  created_at TIMESTAMPTZ default NOW(),
+  updated_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_users_username ON users(username);

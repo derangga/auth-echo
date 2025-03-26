@@ -70,25 +70,30 @@ func (m *JWTAuth) ReAuthMiddleware() echo.MiddlewareFunc {
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
-
-			uid := c.Request().Header.Get("X-User-ID")
-			if uid == "" {
-				return echo.NewHTTPError(http.StatusBadRequest, "Unknown user")
-			}
-			userId, err := strconv.Atoi(uid)
+			claims, err := secret.VerifyWithoutValidateExp(tokenString, m.SigningKey)
 			if err != nil {
-				return echo.NewHTTPError(http.StatusBadRequest, "Unknown user")
+				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
+
+			sessionId, ok := claims["jti"].(string)
+			if !ok {
+				return echo.NewHTTPError(http.StatusBadRequest, "Unknown session")
+			}
+			uid, ok := claims["sub"].(string)
+			if !ok {
+				return echo.NewHTTPError(http.StatusBadRequest, "Unknown session")
+			}
+			userId, _ := strconv.Atoi(uid)
 
 			deviceId := c.Request().Header.Get("X-Device-ID")
 			if deviceId == "" {
 				return echo.NewHTTPError(http.StatusBadRequest, "Unknown Device Identity")
 			}
 
-			req := requests.RefreshTokenReq{
-				RefreshToken: tokenString,
-				UserId:       userId,
-				DeviceId:     deviceId,
+			req := requests.RefreshTokenHeaderReq{
+				SessionId: sessionId,
+				UserId:    userId,
+				DeviceId:  deviceId,
 			}
 
 			newCtx := appctx.SetRefreshTokenRequest(c.Request().Context(), req)

@@ -10,13 +10,14 @@ import (
 
 type TokenClaims struct {
 	Role     int    `json:"cur"`
-	DeviceId string `json:"device_id"`
+	DeviceId string `json:"identity"`
 	jwt.RegisteredClaims
 }
 
 func NewTokenClaims(
 	role int,
 	userid int,
+	sessionId string,
 	deviceId string,
 	tokenLifetime time.Duration,
 ) *TokenClaims {
@@ -25,6 +26,7 @@ func NewTokenClaims(
 		Role:     role,
 		DeviceId: deviceId,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        sessionId,
 			Subject:   strconv.Itoa(userid),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(tokenLifetime)),

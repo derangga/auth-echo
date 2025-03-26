@@ -20,10 +20,10 @@ func GetUserClaims(ctx context.Context) (secret.TokenClaims, error) {
 	return claims, nil
 }
 
-func GetRefreshTokenMeta(ctx context.Context) (requests.RefreshTokenReq, error) {
-	req, ok := ctx.Value(RefreshTokenContextKey).(requests.RefreshTokenReq)
+func GetRefreshTokenMeta(ctx context.Context) (requests.RefreshTokenHeaderReq, error) {
+	req, ok := ctx.Value(RefreshTokenContextKey).(requests.RefreshTokenHeaderReq)
 	if !ok {
-		return requests.RefreshTokenReq{}, errors.New("meta data not found")
+		return requests.RefreshTokenHeaderReq{}, errors.New("meta data not found")
 	}
 
 	return req, nil
@@ -37,6 +37,6 @@ func SetUserClaims(ctx context.Context, claims secret.TokenClaims) context.Conte
 	return context.WithValue(ctx, UserContextKey, claims)
 }
 
-func SetRefreshTokenRequest(ctx context.Context, rt requests.RefreshTokenReq) context.Context {
+func SetRefreshTokenRequest(ctx context.Context, rt requests.RefreshTokenHeaderReq) context.Context {
 	return context.WithValue(ctx, RefreshTokenContextKey, rt)
 }

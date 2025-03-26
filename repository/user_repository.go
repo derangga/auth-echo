@@ -17,28 +17,27 @@ func NewUserRepository(db *sqlx.DB) UserRepository {
 	}
 }
 
-var(
+var (
 	userGetByUsernameQuery = `SELECT id, username, name, email, password FROM users WHERE "username" = $1 AND "deleted_at" IS NULL`
- 	userGetByEmailQuery = `SELECT id, username, name, email, password FROM users WHERE "email" = $1 AND "deleted_at" IS NULL`
-	userGetByID = `SELECT id, username, name, email, password FROM users WHERE "id" = $1 AND "deleted_at" IS NULL`
-	insertUser = `INSERT INTO users(username, name, email, role, password, created_at)
-		VALUES (:username, :name, :email, :role, :password, :created_at)`
+	userGetByEmailQuery    = `SELECT id, username, name, email, password FROM users WHERE "email" = $1 AND "deleted_at" IS NULL`
+	userGetByID            = `SELECT id, username, name, email, password FROM users WHERE "id" = $1 AND "deleted_at" IS NULL`
+	insertUser             = `INSERT INTO users(username, name, email, role, password, created_at)
+		VALUES (:username, :name, :email, :role, :password, :created_at) RETURNING id`
 )
 
-func (r userRepository) Create(ctx context.Context, user *entity.User) (error) {
-	
+func (r userRepository) Create(ctx context.Context, user *entity.User) error {
+
 	stmt, err := r.db.PrepareNamedContext(ctx, insertUser)
 	if err != nil {
 		return err
 	}
+	defer stmt.Close()
 
 	row := stmt.QueryRowxContext(ctx, user)
 
 	if row.Err() != nil {
 		return row.Err()
 	}
-
-	defer stmt.Close()
 
 	return nil
 }
