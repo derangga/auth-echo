@@ -3,6 +3,7 @@ package usecase
 import (
 	customerror "auth-echo/lib/custom_error"
 	"auth-echo/lib/secret"
+	"auth-echo/utils"
 
 	"auth-echo/model/dto"
 	"auth-echo/model/entity"
@@ -20,11 +21,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/gommon/log"
 	"github.com/lib/pq"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type authUsecase struct {
 	config          config.AuthConfig
+	redisClient     *redis.Client
 	userRepo        repository.UserRepository
 	sessionRepo     repository.SessionRepository
 	loginDeviceRepo repository.LoginDevicesRepository
@@ -32,12 +35,14 @@ type authUsecase struct {
 
 func NewAuthUsecase(
 	config config.AuthConfig,
+	redisClient *redis.Client,
 	userRepo repository.UserRepository,
 	sessionRepo repository.SessionRepository,
 	loginDeviceRepo repository.LoginDevicesRepository,
 ) AuthUsecase {
 	return authUsecase{
 		config:          config,
+		redisClient:     redisClient,
 		userRepo:        userRepo,
 		sessionRepo:     sessionRepo,
 		loginDeviceRepo: loginDeviceRepo,
@@ -78,6 +83,9 @@ func (uc authUsecase) Register(ctx context.Context, user requests.Register) erro
 func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorization, error) {
 	user, err := uc.userRepo.GetByUsername(ctx, cred.Username)
 	if err != nil {
+		if utils.IsNoRowError(err) {
+			return dto.Authorization{}, uc.errorUnprocessable("please use correct credential")
+		}
 		log.Errorf("AuthUsecase.getByUsername: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
@@ -171,12 +179,6 @@ func (uc authUsecase) RenewalToken(
 		return dto.Authorization{}, customerror.BuildError(http.StatusUnauthorized, "invalid refresh token")
 	}
 
-	err = uc.sessionRepo.InvalidateByTokenFamily(ctx, session.TokenFamily)
-	if err != nil {
-		log.Errorf("AuthUsecase.invalidateByTokenFamily: %w", err)
-		return dto.Authorization{}, uc.errorUnprocessable("")
-	}
-
 	// create session
 	refreshToken, err := secret.ConstructRefreshToken()
 	if err != nil {
@@ -190,12 +192,19 @@ func (uc authUsecase) RenewalToken(
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
-	newSession, err := uc.sessionRepo.Create(ctx, &entity.Session{
+	newSession, err := uc.sessionRepo.RotateToken(ctx, &entity.Session{
 		UserID:       session.UserID,
 		RefreshToken: hashedRefreshToken,
 		TokenFamily:  session.TokenFamily,
 		ExpiresAt:    time.Now().Add(uc.config.RefreshDuration),
 	})
+
+	// block session id using redis
+	// this is to reject the access token request
+	now := time.Now()
+	if now.Before(header.ExpiresAt) {
+		uc.redisClient.SetNX(ctx, header.SessionId, "block session", header.ExpiresAt.Sub(now))
+	}
 
 	if err != nil {
 		log.Errorf("AuthUsecase.createSession: %w", err)
@@ -225,17 +234,6 @@ func (uc authUsecase) Logout(ctx context.Context, deviceId string, userId int) e
 
 	return nil
 }
-
-// func (uc authUsecase) updateSession(ctx context.Context, refreshToken string, userId int, session *entity.Session) error {
-// 	session.UserID = userId
-// 	session.RefreshToken = refreshToken
-// 	session.UpdatedAt = sql.NullTime{
-// 		Time:  time.Now(),
-// 		Valid: true,
-// 	}
-// 	err := uc.sessionRepo.RenewalSession(ctx, session)
-// 	return err
-// }
 
 func (uc authUsecase) validateEmail(email string) error {
 	_, err := mail.ParseAddress(email)

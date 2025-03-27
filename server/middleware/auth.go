@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -18,12 +19,14 @@ const (
 )
 
 type JWTAuth struct {
-	SigningKey string
+	SigningKey  string
+	redisClient *redis.Client
 }
 
-func ProvideJWTAuth(secret string) *JWTAuth {
+func ProvideJWTAuth(secret string, redisClient *redis.Client) *JWTAuth {
 	return &JWTAuth{
-		SigningKey: secret,
+		SigningKey:  secret,
+		redisClient: redisClient,
 	}
 }
 
@@ -54,6 +57,14 @@ func (m *JWTAuth) UserMiddleware() echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 
+			res, err := m.redisClient.Get(c.Request().Context(), claims.ID).Result()
+			if err != nil && err != redis.Nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, "failed validate session")
+			}
+			if res != "" {
+				return echo.NewHTTPError(http.StatusUnauthorized, "session expired please re-login")
+			}
+
 			newCtx := appctx.SetUserClaims(c.Request().Context(), *claims)
 			c.SetRequest(c.Request().WithContext(newCtx))
 
@@ -77,23 +88,28 @@ func (m *JWTAuth) ReAuthMiddleware() echo.MiddlewareFunc {
 
 			sessionId, ok := claims["jti"].(string)
 			if !ok {
-				return echo.NewHTTPError(http.StatusBadRequest, "Unknown session")
+				return echo.NewHTTPError(http.StatusBadRequest, "unknown session")
+			}
+			exp, err := claims.GetExpirationTime()
+			if err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "failed parse token")
 			}
 			uid, ok := claims["sub"].(string)
 			if !ok {
-				return echo.NewHTTPError(http.StatusBadRequest, "Unknown session")
+				return echo.NewHTTPError(http.StatusBadRequest, "unknown session")
 			}
 			userId, _ := strconv.Atoi(uid)
 
 			deviceId := c.Request().Header.Get("X-Device-ID")
 			if deviceId == "" {
-				return echo.NewHTTPError(http.StatusBadRequest, "Unknown Device Identity")
+				return echo.NewHTTPError(http.StatusBadRequest, "unknown Device Identity")
 			}
 
 			req := requests.RefreshTokenHeaderReq{
 				SessionId: sessionId,
 				UserId:    userId,
 				DeviceId:  deviceId,
+				ExpiresAt: exp.Time,
 			}
 
 			newCtx := appctx.SetRefreshTokenRequest(c.Request().Context(), req)

@@ -1,8 +1,9 @@
 package di
 
 import (
-	"auth-echo/database/connection"
 	"auth-echo/handler"
+	connection "auth-echo/lib/database"
+	redisclient "auth-echo/lib/redis_client"
 	"auth-echo/repository"
 	"auth-echo/server"
 	"auth-echo/server/config"
@@ -11,14 +12,19 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
 )
 
 func provideDB(config config.DatabaseConfig) *sqlx.DB {
 	return connection.NewPostgresDatabase(config)
 }
 
-func provideJWTAuth(config *config.AuthConfig) *middleware.JWTAuth {
-	return middleware.ProvideJWTAuth(config.JWTSecret)
+func provideRedisClient(config config.RedisConfig) *redis.Client {
+	return redisclient.NewRedisClient(config)
+}
+
+func provideJWTAuth(config *config.AuthConfig, redisClient *redis.Client) *middleware.JWTAuth {
+	return middleware.ProvideJWTAuth(config.JWTSecret, redisClient)
 }
 
 func provideUserRepository(db *sqlx.DB) repository.UserRepository {
@@ -35,12 +41,14 @@ func provideLoginDeviceRepository(db *sqlx.DB) repository.LoginDevicesRepository
 
 func provideAuthUsecase(
 	config config.AuthConfig,
+	redisClient *redis.Client,
 	userRepository repository.UserRepository,
 	sessionRepository repository.SessionRepository,
 	loginDeviceRepository repository.LoginDevicesRepository,
 ) usecase.AuthUsecase {
 	return usecase.NewAuthUsecase(
 		config,
+		redisClient,
 		userRepository,
 		sessionRepository,
 		loginDeviceRepository,
@@ -85,13 +93,15 @@ func provideHttpServer(
 
 func InitHttpServer(config *config.Config) server.HttpServer {
 	database := provideDB(config.DatabaseConfig)
+	redisClient := provideRedisClient(config.RedisConfig)
 	validator := provideValidator()
-	jwtAuth := provideJWTAuth(&config.AuthConfig)
+	jwtAuth := provideJWTAuth(&config.AuthConfig, redisClient)
 	userRepository := provideUserRepository(database)
 	sessionRepository := provideSessionRepository(database)
 	loginDeviceRepository := provideLoginDeviceRepository(database)
 	authUC := provideAuthUsecase(
 		config.AuthConfig,
+		redisClient,
 		userRepository,
 		sessionRepository,
 		loginDeviceRepository,

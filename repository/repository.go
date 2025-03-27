@@ -16,6 +16,7 @@ type UserRepository interface {
 
 type SessionRepository interface {
 	Create(ctx context.Context, sessions *entity.Session) (*entity.Session, error)
+	RotateToken(ctx context.Context, session *entity.Session) (*entity.Session, error)
 	InvalidateByTokenFamily(ctx context.Context, tokenFamily uuid.UUID) error
 	GetBySessionId(ctx context.Context, sessionId string) (*entity.SessionWithUser, error)
 	GetByToken(ctx context.Context, refreshToken string) (*entity.SessionWithUser, error)

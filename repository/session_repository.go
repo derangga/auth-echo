@@ -3,6 +3,7 @@ package repository
 import (
 	"auth-echo/model/entity"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -48,6 +49,42 @@ func (r sessionRepository) Create(ctx context.Context, session *entity.Session) 
 	err = row.Scan(&session.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	return session, nil
+}
+
+func (r sessionRepository) RotateToken(ctx context.Context, session *entity.Session) (*entity.Session, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, errors.New("failed begin transaction")
+	}
+	defer tx.Rollback()
+
+	revokeAt := time.Now()
+	_, err = tx.ExecContext(ctx, updateByTokenFamily, session.TokenFamily, revokeAt)
+	if err != nil {
+		return nil, errors.New("failed to revoke old refresh token")
+	}
+
+	stmt, err := tx.PrepareNamedContext(ctx, insertSession)
+	if err != nil {
+		return nil, err
+	}
+
+	row := stmt.QueryRowxContext(ctx, session)
+	if err != nil {
+		return nil, errors.New("failed insert session")
+	}
+
+	err = row.Scan(&session.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, errors.New("failed commit transaction")
 	}
 
 	return session, nil

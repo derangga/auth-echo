@@ -1,6 +1,9 @@
 package requests
 
-import "auth-echo/model/entity"
+import (
+	"auth-echo/model/entity"
+	"time"
+)
 
 type Register struct {
 	Name     string `json:"name" validate:"required,min=5,max=50"`
@@ -26,6 +29,7 @@ type RefreshTokenHeaderReq struct {
 	SessionId string
 	UserId    int
 	DeviceId  string
+	ExpiresAt time.Time
 }
 
 type RefreshTokenBodyReq struct {

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"auth-echo/model/entity"
+	"auth-echo/utils"
 	"context"
 	"net"
 	"time"
@@ -46,7 +47,7 @@ func (r loginDeviceRepository) GetByDeviceId(ctx context.Context, deviceIdentity
 
 	err := r.db.GetContext(ctx, &loginDevice, getByDeviceId, deviceIdentity)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if utils.IsNoRowError(err) {
 			return nil, nil
 		}
 
