@@ -19,8 +19,8 @@ func RegisterRoute(
 	authGroup := e.Group("/auth")
 	registerGroupRoute(authGroup, http.MethodPost, "/login", h.AuthHandler.Login)
 	registerGroupRoute(authGroup, http.MethodPost, "/register", h.AuthHandler.Register)
-	registerGroupRoute(authGroup, http.MethodPost, "/refresh", h.AuthHandler.RenewalToken, reAuthMid)
 	registerGroupRoute(authGroup, http.MethodPost, "/logout", h.AuthHandler.Logout, userMid)
+	registerGroupRoute(authGroup, http.MethodPost, "/refresh", h.AuthHandler.RenewalToken, reAuthMid)
 
 	registerRoute(e, http.MethodGet, "/healtz", h.HealthzHandler.Healthz, userMid)
 }

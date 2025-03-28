@@ -7,7 +7,6 @@ package mock_repository
 import (
 	entity "auth-echo/model/entity"
 	context "context"
-	net "net"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -231,15 +230,15 @@ func (mr *MockLoginDevicesRepositoryMockRecorder) GetByDeviceId(ctx, deviceIdent
 }
 
 // UpdateLastLogin mocks base method.
-func (m *MockLoginDevicesRepository) UpdateLastLogin(ctx context.Context, deviceId, userAgent string, ipAddr net.IP) error {
+func (m *MockLoginDevicesRepository) UpdateLastLogin(ctx context.Context, loginDevice entity.UserLoginDevice) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateLastLogin", ctx, deviceId, userAgent, ipAddr)
+	ret := m.ctrl.Call(m, "UpdateLastLogin", ctx, loginDevice)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateLastLogin indicates an expected call of UpdateLastLogin.
-func (mr *MockLoginDevicesRepositoryMockRecorder) UpdateLastLogin(ctx, deviceId, userAgent, ipAddr interface{}) *gomock.Call {
+func (mr *MockLoginDevicesRepositoryMockRecorder) UpdateLastLogin(ctx, loginDevice interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastLogin", reflect.TypeOf((*MockLoginDevicesRepository)(nil).UpdateLastLogin), ctx, deviceId, userAgent, ipAddr)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastLogin", reflect.TypeOf((*MockLoginDevicesRepository)(nil).UpdateLastLogin), ctx, loginDevice)
 }

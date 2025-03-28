@@ -3,7 +3,6 @@ package repository
 import (
 	"auth-echo/model/entity"
 	"context"
-	"net"
 
 	"github.com/google/uuid"
 )
@@ -24,6 +23,6 @@ type SessionRepository interface {
 
 type LoginDevicesRepository interface {
 	Create(ctx context.Context, loginDevice *entity.UserLoginDevice) error
-	UpdateLastLogin(ctx context.Context, deviceId, userAgent string, ipAddr net.IP) error
+	UpdateLastLogin(ctx context.Context, loginDevice entity.UserLoginDevice) error
 	GetByDeviceId(ctx context.Context, deviceIdentity string) (*entity.UserLoginDevice, error)
 }

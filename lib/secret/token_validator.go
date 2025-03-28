@@ -38,9 +38,9 @@ func VerifyWithoutValidateExp(tokenString, signingKey string) (jwt.MapClaims, er
 
 		// Return the secret key
 		return []byte(signingKey), nil
-	})
+	}, jwt.WithoutClaimsValidation())
 	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
+		return nil, errors.New("masuk kesini")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)

@@ -9,7 +9,6 @@ import (
 	"auth-echo/model/serializer"
 	"auth-echo/usecase"
 	"net"
-	"strconv"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
@@ -130,16 +129,10 @@ func (h AuthHandler) Logout(c echo.Context) error {
 		return responder.ResponseUnauthorize(c, "")
 	}
 
-	uid, err := userMeta.GetSubject()
-	if err != nil {
-		return responder.ResponseBadRequest(c, "")
-	}
-	userId, _ := strconv.Atoi(uid)
-
-	err = h.authUC.Logout(c.Request().Context(), userMeta.DeviceId, userId)
+	err = h.authUC.Logout(c.Request().Context(), userMeta)
 	if err != nil {
 		return responder.ResponseUnprocessableEntity(c, "")
 	}
 
-	return responder.RespondOK(c, nil, "Success logout")
+	return responder.RespondOK(c, nil, "success logout")
 }

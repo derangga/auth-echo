@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"auth-echo/lib/secret"
 	"auth-echo/model/dto"
 	"auth-echo/model/requests"
 	"context"
@@ -14,5 +15,5 @@ type AuthUsecase interface {
 		header requests.RefreshTokenHeaderReq,
 		body requests.RefreshTokenBodyReq,
 	) (dto.Authorization, error)
-	Logout(ctx context.Context, deviceId string, userId int) error
+	Logout(ctx context.Context, cred secret.TokenClaims) error
 }

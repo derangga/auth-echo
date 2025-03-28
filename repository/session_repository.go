@@ -4,7 +4,6 @@ import (
 	"auth-echo/model/entity"
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,7 +104,6 @@ func (r sessionRepository) GetBySessionId(ctx context.Context, sessionId string)
 
 	err := r.db.GetContext(ctx, &session, getBySessionId, sessionId)
 	if err != nil {
-		fmt.Println(err.Error())
 		return nil, err
 	}
 

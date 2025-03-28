@@ -5,6 +5,7 @@
 package mock_usecase
 
 import (
+	secret "auth-echo/lib/secret"
 	dto "auth-echo/model/dto"
 	requests "auth-echo/model/requests"
 	context "context"
@@ -52,17 +53,17 @@ func (mr *MockAuthUsecaseMockRecorder) Login(ctx, cred interface{}) *gomock.Call
 }
 
 // Logout mocks base method.
-func (m *MockAuthUsecase) Logout(ctx context.Context, deviceId string, userId int) error {
+func (m *MockAuthUsecase) Logout(ctx context.Context, cred secret.TokenClaims) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Logout", ctx, deviceId, userId)
+	ret := m.ctrl.Call(m, "Logout", ctx, cred)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Logout indicates an expected call of Logout.
-func (mr *MockAuthUsecaseMockRecorder) Logout(ctx, deviceId, userId interface{}) *gomock.Call {
+func (mr *MockAuthUsecaseMockRecorder) Logout(ctx, cred interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthUsecase)(nil).Logout), ctx, deviceId, userId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthUsecase)(nil).Logout), ctx, cred)
 }
 
 // Register mocks base method.

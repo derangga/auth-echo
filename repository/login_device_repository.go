@@ -4,7 +4,6 @@ import (
 	"auth-echo/model/entity"
 	"auth-echo/utils"
 	"context"
-	"net"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -21,9 +20,9 @@ func NewLoginDeviceRepository(db *sqlx.DB) LoginDevicesRepository {
 }
 
 var (
-	insertLoginDevices = `INSERT INTO user_login_devices(user_id, device_identity, ip_address, user_agent, last_login_at)
-    	VALUES (:user_id, :device_identity, :ip_address, :user_agent, :last_login_at) RETURNING id`
-	updateLastLogin = `UPDATE user_login_devices SET ip_address=$2, user_agent=$3, last_login_at=$4 WHERE device_identity=$1`
+	insertLoginDevices = `INSERT INTO user_login_devices(user_id, session_id, device_identity, ip_address, user_agent, last_login_at)
+    	VALUES (:user_id, :session_id, :device_identity, :ip_address, :user_agent, :last_login_at) RETURNING id`
+	updateLastLogin = `UPDATE user_login_devices SET session_id=$2, ip_address=$3, user_agent=$4, last_login_at=$5 WHERE device_identity=$1`
 	getByDeviceId   = `SELECT id, user_id, device_identity, ip_address, user_agent, created_at, last_login_at 
 		FROM user_login_devices WHERE device_identity=$1 ORDER BY created_at DESC LIMIT 1`
 )
@@ -57,9 +56,17 @@ func (r loginDeviceRepository) GetByDeviceId(ctx context.Context, deviceIdentity
 	return &loginDevice, nil
 }
 
-func (r loginDeviceRepository) UpdateLastLogin(ctx context.Context, deviceId, userAgent string, ipAddr net.IP) error {
+func (r loginDeviceRepository) UpdateLastLogin(ctx context.Context, loginDevice entity.UserLoginDevice) error {
 	lastLoginTime := time.Now()
-	_, err := r.db.ExecContext(ctx, updateLastLogin, deviceId, ipAddr, userAgent, lastLoginTime)
+	_, err := r.db.ExecContext(
+		ctx,
+		updateLastLogin,
+		loginDevice.DeviceIdentity,
+		loginDevice.SessionId,
+		loginDevice.IPAddress,
+		loginDevice.UserAgent,
+		lastLoginTime,
+	)
 	if err != nil {
 		return err
 	}

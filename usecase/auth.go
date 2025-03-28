@@ -95,33 +95,6 @@ func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorizat
 		return dto.Authorization{}, uc.errorUnprocessable("password tidak valid")
 	}
 
-	// upsert log device login
-	loginDevice, err := uc.loginDeviceRepo.GetByDeviceId(ctx, cred.DeviceIdentity)
-	if err != nil {
-		log.Errorf("AuthUsecase.getDeviceById: %w", err)
-	}
-
-	if loginDevice == nil {
-		err = uc.loginDeviceRepo.Create(ctx, &entity.UserLoginDevice{
-			UserID:         user.ID,
-			DeviceIdentity: cred.DeviceIdentity,
-			IPAddress:      cred.IPAddress,
-			UserAgent:      cred.UserAgent,
-			LastLoginAt:    time.Now(),
-		})
-	} else {
-		err = uc.loginDeviceRepo.UpdateLastLogin(
-			ctx,
-			cred.DeviceIdentity,
-			cred.UserAgent,
-			cred.IPAddress,
-		)
-	}
-	if err != nil {
-		log.Errorf("AuthUsecase.upsertLoginDevice: %w", err)
-		return dto.Authorization{}, uc.errorUnprocessable("")
-	}
-
 	// create session
 	refreshToken, err := secret.ConstructRefreshToken()
 	if err != nil {
@@ -143,6 +116,32 @@ func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorizat
 	})
 	if err != nil {
 		log.Errorf("AuthUsecase.createSession: %w", err)
+		return dto.Authorization{}, uc.errorUnprocessable("")
+	}
+
+	// upsert log device login
+	loginDevice, err := uc.loginDeviceRepo.GetByDeviceId(ctx, cred.DeviceIdentity)
+	if err != nil {
+		log.Errorf("AuthUsecase.getDeviceById: %w", err)
+	}
+
+	if loginDevice == nil {
+		err = uc.loginDeviceRepo.Create(ctx, &entity.UserLoginDevice{
+			UserID:         user.ID,
+			SessionId:      session.ID,
+			DeviceIdentity: cred.DeviceIdentity,
+			IPAddress:      cred.IPAddress,
+			UserAgent:      cred.UserAgent,
+			LastLoginAt:    time.Now(),
+		})
+	} else {
+		loginDevice.SessionId = session.ID
+		loginDevice.UserAgent = cred.UserAgent
+		loginDevice.IPAddress = cred.IPAddress
+		err = uc.loginDeviceRepo.UpdateLastLogin(ctx, *loginDevice)
+	}
+	if err != nil {
+		log.Errorf("AuthUsecase.upsertLoginDevice: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
@@ -203,7 +202,7 @@ func (uc authUsecase) RenewalToken(
 	// this is to reject the access token request
 	now := time.Now()
 	if now.Before(header.ExpiresAt) {
-		uc.redisClient.SetNX(ctx, header.SessionId, "block session", header.ExpiresAt.Sub(now))
+		uc.redisClient.SetNX(ctx, header.SessionId, "token rotate", header.ExpiresAt.Sub(now))
 	}
 
 	if err != nil {
@@ -225,12 +224,24 @@ func (uc authUsecase) RenewalToken(
 	}, nil
 }
 
-func (uc authUsecase) Logout(ctx context.Context, deviceId string, userId int) error {
-	// err := uc.sessionRepo.TerminateSession(ctx, userId, deviceId)
-	// if err != nil {
-	// 	log.Errorf("AuthUsecase.updateSession: %w", err)
-	// 	return uc.errorUnprocessable("")
-	// }
+func (uc authUsecase) Logout(ctx context.Context, cred secret.TokenClaims) error {
+	session, err := uc.sessionRepo.GetBySessionId(ctx, cred.ID)
+	if err != nil {
+		log.Errorf("AuthUsecase.getSessionId: %w", err)
+	}
+	err = uc.sessionRepo.InvalidateByTokenFamily(ctx, session.TokenFamily)
+	if err != nil {
+		log.Errorf("AuthUsecase.invalidateToken: %w", err)
+		return uc.errorUnprocessable("")
+	}
+
+	// block jwt token
+	now := time.Now()
+	expTime, err := cred.GetExpirationTime()
+	if err != nil {
+		log.Errorf("AuthUsecase.getExpirationTime: %w", err)
+	}
+	uc.redisClient.SetNX(ctx, session.ID.String(), "user logout", expTime.Sub(now))
 
 	return nil
 }

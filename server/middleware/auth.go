@@ -4,6 +4,7 @@ import (
 	appctx "auth-echo/lib/app_context"
 	"auth-echo/lib/secret"
 	"auth-echo/model/requests"
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -57,12 +58,9 @@ func (m *JWTAuth) UserMiddleware() echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 
-			res, err := m.redisClient.Get(c.Request().Context(), claims.ID).Result()
-			if err != nil && err != redis.Nil {
-				return echo.NewHTTPError(http.StatusUnauthorized, "failed validate session")
-			}
-			if res != "" {
-				return echo.NewHTTPError(http.StatusUnauthorized, "session expired please re-login")
+			err = m.isJWTBlocked(c.Request().Context(), claims.ID)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 
 			newCtx := appctx.SetUserClaims(c.Request().Context(), *claims)
@@ -90,6 +88,13 @@ func (m *JWTAuth) ReAuthMiddleware() echo.MiddlewareFunc {
 			if !ok {
 				return echo.NewHTTPError(http.StatusBadRequest, "unknown session")
 			}
+
+			// force reject when jwt blocked
+			err = m.isJWTBlocked(c.Request().Context(), sessionId)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
+			}
+
 			exp, err := claims.GetExpirationTime()
 			if err != nil {
 				return echo.NewHTTPError(http.StatusBadRequest, "failed parse token")
@@ -123,4 +128,16 @@ func (m *JWTAuth) ReAuthMiddleware() echo.MiddlewareFunc {
 
 func (m JWTAuth) tokenError(message string) error {
 	return errors.New(message)
+}
+
+// session id is provided by jti field
+func (m JWTAuth) isJWTBlocked(ctx context.Context, sessionId string) error {
+	res, err := m.redisClient.Get(ctx, sessionId).Result()
+	if err != nil && err != redis.Nil {
+		return errors.New("failed validate session")
+	}
+	if res != "" {
+		return errors.New("session expired please re-login")
+	}
+	return nil
 }
