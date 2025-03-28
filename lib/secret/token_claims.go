@@ -9,27 +9,24 @@ import (
 )
 
 type TokenClaims struct {
-	Role int 			`json:"cur"`
-	GrantType string 	`json:"grant_type"`
-	jwt.RegisteredClaims 
+	Role     int    `json:"cur"`
+	DeviceId string `json:"identity"`
+	jwt.RegisteredClaims
 }
-
-const (
-	AccessToken = "access_token"
-	RefreshToken = "refresh"
-)
 
 func NewTokenClaims(
 	role int,
 	userid int,
-	tokenType string,
+	sessionId string,
+	deviceId string,
 	tokenLifetime time.Duration,
 ) *TokenClaims {
 	now := time.Now()
 	return &TokenClaims{
-			Role: role,
-			GrantType: tokenType,
-			RegisteredClaims: jwt.RegisteredClaims{
+		Role:     role,
+		DeviceId: deviceId,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        sessionId,
 			Subject:   strconv.Itoa(userid),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(tokenLifetime)),

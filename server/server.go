@@ -17,10 +17,10 @@ type HttpServer interface {
 }
 
 type Server struct {
-	echo         *echo.Echo
-	config       *config.Config
-	handler      handler.Handlers
-	jwtAuth      *middleware.JWTAuth
+	echo    *echo.Echo
+	config  *config.Config
+	handler handler.Handlers
+	jwtAuth *middleware.JWTAuth
 }
 
 func NewHttpServer(
@@ -32,10 +32,10 @@ func NewHttpServer(
 	middleware.SetupGlobalMiddleware(e, config.ApplicationConfig)
 
 	srv := &Server{
-		echo:         e,
-		config:          config,
-		handler:      handler,
-		jwtAuth:      jwtAuth,
+		echo:    e,
+		config:  config,
+		handler: handler,
+		jwtAuth: jwtAuth,
 	}
 
 	srv.connectCoreWithEcho()
@@ -43,7 +43,7 @@ func NewHttpServer(
 }
 
 func (s *Server) ListenAndServe() error {
-	return s.echo.Start(":" + s.config.ApplicationConfig.Port)
+	return s.echo.Start("127.0.0.1:" + s.config.ApplicationConfig.Port)
 }
 
 func (s *Server) Stop() {

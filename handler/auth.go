@@ -4,9 +4,11 @@ import (
 	appctx "auth-echo/lib/app_context"
 	customerror "auth-echo/lib/custom_error"
 	"auth-echo/lib/responder"
+	"auth-echo/model/dto"
 	"auth-echo/model/requests"
 	"auth-echo/model/serializer"
 	"auth-echo/usecase"
+	"net"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
@@ -14,7 +16,7 @@ import (
 )
 
 type AuthHandler struct {
-	authUC   usecase.AuthUsecase
+	authUC    usecase.AuthUsecase
 	validator *validator.Validate
 }
 
@@ -23,7 +25,7 @@ func NewAuthHandler(
 	validator *validator.Validate,
 ) AuthHandler {
 	return AuthHandler{
-		authUC: authUC,
+		authUC:    authUC,
 		validator: validator,
 	}
 }
@@ -37,15 +39,33 @@ func (h AuthHandler) Login(c echo.Context) error {
 		return responder.ResponseBadRequest(c, "")
 	}
 
-	// validate request data
+	deviceId := c.Request().Header.Get("X-Device-ID")
+	if deviceId == "" {
+		return responder.ResponseBadRequest(c, "Unknown Device Identity")
+	}
+
 	err = h.validator.Struct(req)
 	if err != nil {
 		log.Errorf("AuthHandler.validateStruct: %w", err)
 		return responder.ResponseBadRequest(c, "")
 	}
 
+	userAgent := c.Request().UserAgent()
+	ipAddress, _, err := net.SplitHostPort(c.Request().RemoteAddr)
+	if err != nil {
+		log.Errorf("AuthHandler.getIpAddr: %w", err)
+		return responder.ResponseBadRequest(c, "")
+	}
+	loginDTO := dto.Login{
+		Username:       req.Username,
+		Password:       req.Password,
+		DeviceIdentity: deviceId,
+		UserAgent:      userAgent,
+		IPAddress:      net.IP(ipAddress),
+	}
+
 	// proceed to usecase
-	authorization, err := h.authUC.Login(c.Request().Context(), req)
+	authorization, err := h.authUC.Login(c.Request().Context(), loginDTO)
 	if err != nil {
 		return responder.ResponseUnprocessableEntity(c, err.Error())
 	}
@@ -53,7 +73,7 @@ func (h AuthHandler) Login(c echo.Context) error {
 	return responder.RespondOK(c, serializer.PublicAuthorization(authorization), "")
 }
 
-func (h AuthHandler) Register (c echo.Context) error {
+func (h AuthHandler) Register(c echo.Context) error {
 	var req requests.Register
 	err := c.Bind(&req)
 	if err != nil {
@@ -78,20 +98,41 @@ func (h AuthHandler) Register (c echo.Context) error {
 }
 
 func (h AuthHandler) RenewalToken(c echo.Context) error {
+	headerReq, err := appctx.GetRefreshTokenMeta(c.Request().Context())
+	if err != nil {
+		return responder.ResponseUnauthorize(c, "")
+	}
+
+	var req requests.RefreshTokenBodyReq
+	err = c.Bind(&req)
+	if err != nil {
+		return responder.ResponseBadRequest(c, "")
+	}
+
+	authorization, err := h.authUC.RenewalToken(c.Request().Context(), headerReq, req)
+	if err != nil {
+		if ce, ok := err.(customerror.CustomError); ok {
+			return responder.BuildResponse(c, responder.Response{
+				Message:    ce.Error(),
+				HTTPStatus: ce.HTTPCode,
+			})
+		}
+		return responder.ResponseUnprocessableEntity(c, "")
+	}
+
+	return responder.RespondOK(c, serializer.PublicAuthorization(authorization), "")
+}
+
+func (h AuthHandler) Logout(c echo.Context) error {
 	userMeta, err := appctx.GetUserClaims(c.Request().Context())
 	if err != nil {
 		return responder.ResponseUnauthorize(c, "")
 	}
 
-	userid, err := userMeta.GetUserID()
-	if err != nil {
-		return responder.ResponseBadRequest(c, "")
-	}
-
-	authorization, err := h.authUC.RenewalToken(c.Request().Context(), userid)
+	err = h.authUC.Logout(c.Request().Context(), userMeta)
 	if err != nil {
 		return responder.ResponseUnprocessableEntity(c, "")
 	}
 
-	return responder.RespondOK(c, serializer.PublicAuthorization(authorization), "")
+	return responder.RespondOK(c, nil, "success logout")
 }

@@ -14,5 +14,3 @@ func main() {
 		log.Fatal("failed to serve http:", err.Error())
 	}
 }
-
-

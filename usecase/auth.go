@@ -3,6 +3,7 @@ package usecase
 import (
 	customerror "auth-echo/lib/custom_error"
 	"auth-echo/lib/secret"
+	"auth-echo/utils"
 
 	"auth-echo/model/dto"
 	"auth-echo/model/entity"
@@ -17,24 +18,34 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/labstack/gommon/log"
 	"github.com/lib/pq"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type authUsecase struct {
-	config config.AuthConfig
-	userRepository repository.UserRepository
+	config          config.AuthConfig
+	redisClient     *redis.Client
+	userRepo        repository.UserRepository
+	sessionRepo     repository.SessionRepository
+	loginDeviceRepo repository.LoginDevicesRepository
 }
 
 func NewAuthUsecase(
 	config config.AuthConfig,
-	userRepository repository.UserRepository,
+	redisClient *redis.Client,
+	userRepo repository.UserRepository,
+	sessionRepo repository.SessionRepository,
+	loginDeviceRepo repository.LoginDevicesRepository,
 ) AuthUsecase {
 	return authUsecase{
-		config:	config,
-		userRepository: userRepository,
+		config:          config,
+		redisClient:     redisClient,
+		userRepo:        userRepo,
+		sessionRepo:     sessionRepo,
+		loginDeviceRepo: loginDeviceRepo,
 	}
 }
 
@@ -56,8 +67,8 @@ func (uc authUsecase) Register(ctx context.Context, user requests.Register) erro
 	entity.Password = password
 	entity.Role = "user"
 	entity.CreatedAt = time.Now()
-	
-	err = uc.userRepository.Create(ctx, entity)
+
+	err = uc.userRepo.Create(ctx, entity)
 	if err != nil {
 		log.Errorf("authUsecase Register: %w", err)
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
@@ -69,9 +80,12 @@ func (uc authUsecase) Register(ctx context.Context, user requests.Register) erro
 	return err
 }
 
-func (uc authUsecase) Login(ctx context.Context, cred requests.Login) (dto.Authorization, error) {
-	user, err := uc.userRepository.GetByUsername(ctx, cred.Username)
+func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorization, error) {
+	user, err := uc.userRepo.GetByUsername(ctx, cred.Username)
 	if err != nil {
+		if utils.IsNoRowError(err) {
+			return dto.Authorization{}, uc.errorUnprocessable("please use correct credential")
+		}
 		log.Errorf("AuthUsecase.getByUsername: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
@@ -80,45 +94,145 @@ func (uc authUsecase) Login(ctx context.Context, cred requests.Login) (dto.Autho
 		log.Errorf("AuthUsecase.validateHash: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("password tidak valid")
 	}
-	
-	accessToken, err := uc.constructJWT(user, secret.AccessToken, uc.config.JWTValidDuration)
+
+	// create session
+	refreshToken, err := uc.generateRefreshToken()
 	if err != nil {
-		log.Errorf("AuthUsecase.constructJWT: %w", err)
+		log.Errorf("AuthUsecase.generateRefreshToken: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
-	refreshToken, err := uc.constructJWT(user, secret.RefreshToken, uc.config.JWTRefreshDuration)
+
+	uuid := uuid.New()
+	session, err := uc.sessionRepo.Create(ctx, &entity.Session{
+		UserID:       user.ID,
+		RefreshToken: refreshToken[1],
+		TokenFamily:  uuid,
+		ExpiresAt:    time.Now().Add(uc.config.RefreshDuration),
+	})
 	if err != nil {
-		log.Errorf("AuthUsecase.constructRefreshJWT: %w", err)
+		log.Errorf("AuthUsecase.createSession: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
+
+	// upsert log device login
+	loginDevice, err := uc.loginDeviceRepo.GetByDeviceId(ctx, cred.DeviceIdentity)
+	if err != nil {
+		log.Errorf("AuthUsecase.getDeviceById: %w", err)
+		return dto.Authorization{}, uc.errorUnprocessable("")
+	}
+
+	if loginDevice == nil {
+		err = uc.loginDeviceRepo.Create(ctx, &entity.UserLoginDevice{
+			UserID:         user.ID,
+			SessionId:      session.ID,
+			DeviceIdentity: cred.DeviceIdentity,
+			IPAddress:      cred.IPAddress,
+			UserAgent:      cred.UserAgent,
+			LastLoginAt:    time.Now(),
+		})
+	} else {
+		loginDevice.SessionId = session.ID
+		loginDevice.UserAgent = cred.UserAgent
+		loginDevice.IPAddress = cred.IPAddress
+		err = uc.loginDeviceRepo.UpdateLastLogin(ctx, *loginDevice)
+	}
+	if err != nil {
+		log.Errorf("AuthUsecase.upsertLoginDevice: %w", err)
+		return dto.Authorization{}, uc.errorUnprocessable("")
+	}
+
+	accessToken, err := secret.ConstructJWT(secret.JWTPayload{
+		UserID:    user.ID,
+		UserRole:  user.RoleToEnum(),
+		SessionId: session.ID.String(),
+		DeviceId:  cred.DeviceIdentity,
+		Lifetime:  uc.config.JWTValidDuration,
+	}, uc.config.JWTSecret)
+
 	return dto.Authorization{
-		AccessToken: accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken[0],
 	}, nil
 }
 
-func (uc authUsecase) RenewalToken(ctx context.Context, userid int) (dto.Authorization, error) {
-	user, err := uc.userRepository.GetByID(ctx, userid)
+func (uc authUsecase) RenewalToken(
+	ctx context.Context,
+	header requests.RefreshTokenHeaderReq,
+	body requests.RefreshTokenBodyReq,
+) (dto.Authorization, error) {
+	session, err := uc.sessionRepo.GetBySessionId(ctx, header.SessionId)
 	if err != nil {
-		log.Errorf("AuthUsecase.renewalToken: %w", err)
+		log.Error("AuthUsecase.failedGetSession: invalid token: %w", err)
+		return dto.Authorization{}, customerror.BuildError(http.StatusUnauthorized, "invalid session")
+	}
+
+	if header.UserId != session.UserID {
+		return dto.Authorization{}, customerror.BuildError(http.StatusUnauthorized, "invalid refresh token")
+	}
+
+	if isValid := secret.VerifyRefreshToken(session.RefreshToken, body.RefreshToken); !isValid {
+		return dto.Authorization{}, customerror.BuildError(http.StatusUnauthorized, "invalid refresh token")
+	}
+
+	// create session
+	refreshToken, err := uc.generateRefreshToken()
+	if err != nil {
+		log.Errorf("AuthUsecase.generateRefreshToken: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
-	accessToken, err := uc.constructJWT(user, secret.AccessToken, uc.config.JWTValidDuration)
+	newSession, err := uc.sessionRepo.RotateToken(ctx, &entity.Session{
+		UserID:       session.UserID,
+		RefreshToken: refreshToken[1],
+		TokenFamily:  session.TokenFamily,
+		ExpiresAt:    time.Now().Add(uc.config.RefreshDuration),
+	})
 	if err != nil {
-		log.Errorf("AuthUsecase.constructJWT: %w", err)
+		log.Errorf("AuthUsecase.rotateToken: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
-	refreshToken, err := uc.constructJWT(user, secret.RefreshToken, uc.config.JWTRefreshDuration)
-	if err != nil {
-		log.Errorf("AuthUsecase.constructRefreshJWT: %w", err)
-		return dto.Authorization{}, uc.errorUnprocessable("")
+
+	// block session id using redis
+	// this is to reject the access token request
+	now := time.Now()
+	if now.Before(header.ExpiresAt) {
+		uc.redisClient.SetNX(ctx, header.SessionId, "token rotate", header.ExpiresAt.Sub(now))
 	}
+
+	accessToken, err := secret.ConstructJWT(secret.JWTPayload{
+		UserID:    header.UserId,
+		UserRole:  session.RoleToEnum(),
+		SessionId: newSession.ID.String(),
+		DeviceId:  header.DeviceId,
+		Lifetime:  uc.config.JWTValidDuration,
+	}, uc.config.JWTSecret)
 
 	return dto.Authorization{
-		AccessToken: accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken[0],
 	}, nil
+}
+
+func (uc authUsecase) Logout(ctx context.Context, cred secret.TokenClaims) error {
+	session, err := uc.sessionRepo.GetBySessionId(ctx, cred.ID)
+	if err != nil {
+		log.Errorf("AuthUsecase.getSessionId: %w", err)
+	}
+	err = uc.sessionRepo.InvalidateByTokenFamily(ctx, session.TokenFamily)
+	if err != nil {
+		log.Errorf("AuthUsecase.invalidateToken: %w", err)
+		return uc.errorUnprocessable("")
+	}
+
+	// block jwt token
+	now := time.Now()
+	expTime, err := cred.GetExpirationTime()
+	if err != nil {
+		log.Errorf("AuthUsecase.getExpirationTime: %w", err)
+	}
+	uc.redisClient.SetNX(ctx, session.ID.String(), "user logout", expTime.Sub(now))
+
+	return nil
 }
 
 func (uc authUsecase) validateEmail(email string) error {
@@ -162,7 +276,7 @@ func (uc authUsecase) validatePassword(password string) error {
 		}
 	}
 
-	isFormatValid := isLower && isUpper && isDigit && isSpecial 
+	isFormatValid := isLower && isUpper && isDigit && isSpecial
 	if !isFormatValid {
 		return uc.errorUnprocessable("password must contains lowercase, uppercase, digit, and special character")
 	}
@@ -187,21 +301,22 @@ func (uc authUsecase) generatePasswordHash(password string) (string, error) {
 	return string(result), nil
 }
 
-func (uc authUsecase) constructJWT(user entity.User, tokenType string, lifetime time.Duration) (string, error) {
-	claims := secret.NewTokenClaims(user.RoleToEnum(), user.ID, tokenType, lifetime)
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(uc.config.JWTSecret))
-	if err != nil {
-		return "", err
-	}
-
-	return signedToken, nil
-}
-
 func (uc authUsecase) errorUnprocessable(message string) error {
 	return customerror.BuildError(
-		http.StatusUnprocessableEntity, 
+		http.StatusUnprocessableEntity,
 		message,
 	)
+}
+
+func (uc authUsecase) generateRefreshToken() ([]string, error) {
+	refreshToken, err := secret.ConstructRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+	hashedRefreshToken, err := secret.HasedRefreshToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return []string{refreshToken, hashedRefreshToken}, nil
 }

@@ -3,12 +3,15 @@ package middleware
 import (
 	appctx "auth-echo/lib/app_context"
 	"auth-echo/lib/secret"
+	"auth-echo/model/requests"
+	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -17,12 +20,14 @@ const (
 )
 
 type JWTAuth struct {
-	SigningKey string
+	SigningKey  string
+	redisClient *redis.Client
 }
 
-func ProvideJWTAuth(secret string) *JWTAuth {
+func ProvideJWTAuth(secret string, redisClient *redis.Client) *JWTAuth {
 	return &JWTAuth{
-		SigningKey: secret,
+		SigningKey:  secret,
+		redisClient: redisClient,
 	}
 }
 
@@ -40,29 +45,6 @@ func (m *JWTAuth) extractToken(c echo.Context) (string, error) {
 	return tokenString, nil
 }
 
-func (m *JWTAuth) VerifyToken(tokenString string) (*secret.TokenClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &secret.TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		// Check the signing method
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return secret.TokenClaims{}, m.tokenError("invalid token signing method")
-		}
-
-		// Return the secret key
-		return []byte(m.SigningKey), nil
-	})
-	
-	if err != nil || !token.Valid {
-		return nil, m.tokenError("invalid token")
-	}
-
-	claims, ok := token.Claims.(*secret.TokenClaims)
-	if !ok {
-		return nil, m.tokenError("invalid token claims")
-	}
-
-	return claims, nil
-}
-
 func (m *JWTAuth) UserMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -71,12 +53,14 @@ func (m *JWTAuth) UserMiddleware() echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 
-			claims, err := m.VerifyToken(tokenString)
+			claims, err := secret.VerifyJWTToken(tokenString, m.SigningKey)
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
-			if claims.GrantType != secret.AccessToken {
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+
+			err = m.isJWTBlocked(c.Request().Context(), claims.ID)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 
 			newCtx := appctx.SetUserClaims(c.Request().Context(), *claims)
@@ -95,16 +79,45 @@ func (m *JWTAuth) ReAuthMiddleware() echo.MiddlewareFunc {
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
-
-			claims, err := m.VerifyToken(tokenString)
+			claims, err := secret.VerifyWithoutValidateExp(tokenString, m.SigningKey)
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
-			if claims.GrantType != secret.RefreshToken {
-				return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+
+			sessionId, ok := claims["jti"].(string)
+			if !ok {
+				return echo.NewHTTPError(http.StatusBadRequest, "unknown session")
 			}
 
-			newCtx := appctx.SetUserClaims(c.Request().Context(), *claims)
+			// force reject when jwt blocked
+			err = m.isJWTBlocked(c.Request().Context(), sessionId)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
+			}
+
+			exp, err := claims.GetExpirationTime()
+			if err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "failed parse token")
+			}
+			uid, ok := claims["sub"].(string)
+			if !ok {
+				return echo.NewHTTPError(http.StatusBadRequest, "unknown session")
+			}
+			userId, _ := strconv.Atoi(uid)
+
+			deviceId := c.Request().Header.Get("X-Device-ID")
+			if deviceId == "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "unknown Device Identity")
+			}
+
+			req := requests.RefreshTokenHeaderReq{
+				SessionId: sessionId,
+				UserId:    userId,
+				DeviceId:  deviceId,
+				ExpiresAt: exp.Time,
+			}
+
+			newCtx := appctx.SetRefreshTokenRequest(c.Request().Context(), req)
 			c.SetRequest(c.Request().WithContext(newCtx))
 
 			// Call the next handler in the chain
@@ -115,4 +128,16 @@ func (m *JWTAuth) ReAuthMiddleware() echo.MiddlewareFunc {
 
 func (m JWTAuth) tokenError(message string) error {
 	return errors.New(message)
+}
+
+// session id is provided by jti field
+func (m JWTAuth) isJWTBlocked(ctx context.Context, sessionId string) error {
+	res, err := m.redisClient.Get(ctx, sessionId).Result()
+	if err != nil && err != redis.Nil {
+		return errors.New("failed validate session")
+	}
+	if res != "" {
+		return errors.New("session expired please re-login")
+	}
+	return nil
 }

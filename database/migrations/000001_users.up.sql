@@ -6,17 +6,17 @@ CREATE TYPE user_role AS ENUM (
 );
 
 CREATE TABLE IF NOT EXISTS users(
-  id serial PRIMARY KEY,
-  username varchar(15) unique not null,
-  email varchar(100) unique not null,
-  "name" varchar(100),
-  "password" varchar(100),
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(15) UNIQUE NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  "name" VARCHAR(100),
+  "password" VARCHAR(100),
   role user_role,
-  created_at timestamp,
-  updated_at timestamp,
-  deleted_at timestamp
+  created_at TIMESTAMPTZ default NOW(),
+  updated_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ
 );
 
-CREATE INDEX ON "users" (username);
+CREATE INDEX idx_users_username ON users(username);
 
 commit;

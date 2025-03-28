@@ -5,6 +5,7 @@
 package mock_usecase
 
 import (
+	secret "auth-echo/lib/secret"
 	dto "auth-echo/model/dto"
 	requests "auth-echo/model/requests"
 	context "context"
@@ -37,7 +38,7 @@ func (m *MockAuthUsecase) EXPECT() *MockAuthUsecaseMockRecorder {
 }
 
 // Login mocks base method.
-func (m *MockAuthUsecase) Login(ctx context.Context, cred requests.Login) (dto.Authorization, error) {
+func (m *MockAuthUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorization, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Login", ctx, cred)
 	ret0, _ := ret[0].(dto.Authorization)
@@ -49,6 +50,20 @@ func (m *MockAuthUsecase) Login(ctx context.Context, cred requests.Login) (dto.A
 func (mr *MockAuthUsecaseMockRecorder) Login(ctx, cred interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockAuthUsecase)(nil).Login), ctx, cred)
+}
+
+// Logout mocks base method.
+func (m *MockAuthUsecase) Logout(ctx context.Context, cred secret.TokenClaims) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Logout", ctx, cred)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Logout indicates an expected call of Logout.
+func (mr *MockAuthUsecaseMockRecorder) Logout(ctx, cred interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthUsecase)(nil).Logout), ctx, cred)
 }
 
 // Register mocks base method.
@@ -66,16 +81,16 @@ func (mr *MockAuthUsecaseMockRecorder) Register(ctx, user interface{}) *gomock.C
 }
 
 // RenewalToken mocks base method.
-func (m *MockAuthUsecase) RenewalToken(ctx context.Context, userid int) (dto.Authorization, error) {
+func (m *MockAuthUsecase) RenewalToken(ctx context.Context, header requests.RefreshTokenHeaderReq, body requests.RefreshTokenBodyReq) (dto.Authorization, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RenewalToken", ctx, userid)
+	ret := m.ctrl.Call(m, "RenewalToken", ctx, header, body)
 	ret0, _ := ret[0].(dto.Authorization)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RenewalToken indicates an expected call of RenewalToken.
-func (mr *MockAuthUsecaseMockRecorder) RenewalToken(ctx, userid interface{}) *gomock.Call {
+func (mr *MockAuthUsecaseMockRecorder) RenewalToken(ctx, header, body interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewalToken", reflect.TypeOf((*MockAuthUsecase)(nil).RenewalToken), ctx, userid)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewalToken", reflect.TypeOf((*MockAuthUsecase)(nil).RenewalToken), ctx, header, body)
 }

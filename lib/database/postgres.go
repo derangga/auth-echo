@@ -25,8 +25,6 @@ func NewPostgresDatabase(config config.DatabaseConfig) *sqlx.DB {
 		param,
 	)
 
-	fmt.Println(connStr)
-
 	db, err := sqlx.Open(postgreDriver, connStr)
 	if err != nil {
 		log.Fatal("failed to open db connection:", err.Error())
