@@ -96,21 +96,16 @@ func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorizat
 	}
 
 	// create session
-	refreshToken, err := secret.ConstructRefreshToken()
+	refreshToken, err := uc.generateRefreshToken()
 	if err != nil {
-		log.Errorf("AuthUsecase.constructRefreshToken: %w", err)
+		log.Errorf("AuthUsecase.generateRefreshToken: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
-	hashedRefreshToken, err := secret.HasedRefreshToken(refreshToken)
-	if err != nil {
-		log.Errorf("AuthUsecase.hashedRT: %w", err)
-		return dto.Authorization{}, uc.errorUnprocessable("")
-	}
-	uuid := uuid.New()
 
+	uuid := uuid.New()
 	session, err := uc.sessionRepo.Create(ctx, &entity.Session{
 		UserID:       user.ID,
-		RefreshToken: hashedRefreshToken,
+		RefreshToken: refreshToken[1],
 		TokenFamily:  uuid,
 		ExpiresAt:    time.Now().Add(uc.config.RefreshDuration),
 	})
@@ -123,6 +118,7 @@ func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorizat
 	loginDevice, err := uc.loginDeviceRepo.GetByDeviceId(ctx, cred.DeviceIdentity)
 	if err != nil {
 		log.Errorf("AuthUsecase.getDeviceById: %w", err)
+		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
 	if loginDevice == nil {
@@ -155,7 +151,7 @@ func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorizat
 
 	return dto.Authorization{
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		RefreshToken: refreshToken[0],
 	}, nil
 }
 
@@ -179,35 +175,28 @@ func (uc authUsecase) RenewalToken(
 	}
 
 	// create session
-	refreshToken, err := secret.ConstructRefreshToken()
+	refreshToken, err := uc.generateRefreshToken()
 	if err != nil {
-		log.Errorf("AuthUsecase.constructRefreshToken: %w", err)
-		return dto.Authorization{}, uc.errorUnprocessable("")
-	}
-
-	hashedRefreshToken, err := secret.HasedRefreshToken(refreshToken)
-	if err != nil {
-		log.Errorf("AuthUsecase.hashedRT: %w", err)
+		log.Errorf("AuthUsecase.generateRefreshToken: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
 	newSession, err := uc.sessionRepo.RotateToken(ctx, &entity.Session{
 		UserID:       session.UserID,
-		RefreshToken: hashedRefreshToken,
+		RefreshToken: refreshToken[1],
 		TokenFamily:  session.TokenFamily,
 		ExpiresAt:    time.Now().Add(uc.config.RefreshDuration),
 	})
+	if err != nil {
+		log.Errorf("AuthUsecase.rotateToken: %w", err)
+		return dto.Authorization{}, uc.errorUnprocessable("")
+	}
 
 	// block session id using redis
 	// this is to reject the access token request
 	now := time.Now()
 	if now.Before(header.ExpiresAt) {
 		uc.redisClient.SetNX(ctx, header.SessionId, "token rotate", header.ExpiresAt.Sub(now))
-	}
-
-	if err != nil {
-		log.Errorf("AuthUsecase.createSession: %w", err)
-		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
 	accessToken, err := secret.ConstructJWT(secret.JWTPayload{
@@ -220,7 +209,7 @@ func (uc authUsecase) RenewalToken(
 
 	return dto.Authorization{
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		RefreshToken: refreshToken[0],
 	}, nil
 }
 
@@ -317,4 +306,17 @@ func (uc authUsecase) errorUnprocessable(message string) error {
 		http.StatusUnprocessableEntity,
 		message,
 	)
+}
+
+func (uc authUsecase) generateRefreshToken() ([]string, error) {
+	refreshToken, err := secret.ConstructRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+	hashedRefreshToken, err := secret.HasedRefreshToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return []string{refreshToken, hashedRefreshToken}, nil
 }

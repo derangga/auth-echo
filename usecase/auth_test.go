@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redismock/v9"
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/bcrypt"
@@ -23,6 +25,7 @@ type AuthTestAccessor struct {
 	userRepo        *mock_repository.MockUserRepository
 	sessionRepo     *mock_repository.MockSessionRepository
 	loginDeviceRepo *mock_repository.MockLoginDevicesRepository
+	redisClientMock redismock.ClientMock
 	authUC          usecase.AuthUsecase
 }
 
@@ -37,10 +40,14 @@ func newAuthTestAccessor(ctrl *gomock.Controller) AuthTestAccessor {
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	mockSessionRepo := mock_repository.NewMockSessionRepository(ctrl)
 	mockLoginDeviceRepo := mock_repository.NewMockLoginDevicesRepository(ctrl)
-	authUC := usecase.NewAuthUsecase(authConfig, mockUserRepo, mockSessionRepo, mockLoginDeviceRepo)
+	redisClient, mock := redismock.NewClientMock()
+	authUC := usecase.NewAuthUsecase(authConfig, redisClient, mockUserRepo, mockSessionRepo, mockLoginDeviceRepo)
 	return AuthTestAccessor{
-		userRepo: mockUserRepo,
-		authUC:   authUC,
+		userRepo:        mockUserRepo,
+		sessionRepo:     mockSessionRepo,
+		loginDeviceRepo: mockLoginDeviceRepo,
+		redisClientMock: mock,
+		authUC:          authUC,
 	}
 }
 
@@ -224,7 +231,7 @@ func TestLogin(t *testing.T) {
 	mockUser := entity.User{
 		ID:        1,
 		Username:  "testusername",
-		Password:  mockHashPassword("testpassword", 8),
+		Password:  mockHash("testpassword", 8),
 		CreatedAt: time.Now(),
 	}
 	tests := []struct {
@@ -251,7 +258,7 @@ func TestLogin(t *testing.T) {
 				user := entity.User{
 					ID:        1,
 					Username:  "testusername",
-					Password:  mockHashPassword("testpassword!", 8),
+					Password:  mockHash("testpassword!", 8),
 					CreatedAt: time.Now(),
 				}
 				accessor.userRepo.EXPECT().
@@ -262,11 +269,80 @@ func TestLogin(t *testing.T) {
 			},
 		},
 		{
+			name:       "failed create session then return unprocessible",
+			credential: cred,
+			initMock: func() {
+				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
+				accessor.sessionRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, errors.New("failed create session"))
+			},
+			assertion: func(a dto.Authorization, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name:       "failed get login device info then return unprocessible",
+			credential: cred,
+			initMock: func() {
+				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
+				accessor.sessionRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&entity.Session{
+					ID:          uuid.New(),
+					UserID:      1,
+					TokenFamily: uuid.New(),
+				}, nil)
+				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(nil, errors.New("failed get login atempt log"))
+			},
+			assertion: func(a dto.Authorization, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name:       "failed create login device info then return unprocessible",
+			credential: cred,
+			initMock: func() {
+				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
+				accessor.sessionRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&entity.Session{
+					ID:          uuid.New(),
+					UserID:      1,
+					TokenFamily: uuid.New(),
+				}, nil)
+				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(nil, nil)
+				accessor.loginDeviceRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(errors.New("failed create log"))
+			},
+			assertion: func(a dto.Authorization, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name:       "failed update login device info then return unprocessible",
+			credential: cred,
+			initMock: func() {
+				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
+				accessor.sessionRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&entity.Session{
+					ID:          uuid.New(),
+					UserID:      1,
+					TokenFamily: uuid.New(),
+				}, nil)
+				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(&entity.UserLoginDevice{
+					ID: 1,
+				}, nil)
+				accessor.loginDeviceRepo.EXPECT().UpdateLastLogin(gomock.Any(), gomock.Any()).Return(errors.New("failed create log"))
+			},
+			assertion: func(a dto.Authorization, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
 			name:       "user login and success auth then return authorization",
 			credential: cred,
 			initMock: func() {
-				accessor.userRepo.EXPECT().
-					GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
+				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
+				accessor.sessionRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&entity.Session{
+					ID:          uuid.New(),
+					UserID:      1,
+					TokenFamily: uuid.New(),
+				}, nil)
+				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(nil, nil)
+				accessor.loginDeviceRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			assertion: func(a dto.Authorization, err error) {
 				assert.NotEmpty(t, a.AccessToken)
@@ -294,6 +370,16 @@ func TestRenewalToken(t *testing.T) {
 	authUC := accessor.authUC
 	ctx := context.Background()
 
+	headerReq := requests.RefreshTokenHeaderReq{
+		SessionId: "abc-123-def",
+		UserId:    1,
+		DeviceId:  "wasd",
+		ExpiresAt: time.Now().Add(10 * time.Hour),
+	}
+	bodyReq := requests.RefreshTokenBodyReq{
+		RefreshToken: "examplerefreshtoken",
+	}
+
 	tests := []struct {
 		name      string
 		header    requests.RefreshTokenHeaderReq
@@ -302,25 +388,78 @@ func TestRenewalToken(t *testing.T) {
 		assertion func(dto.Authorization, error)
 	}{
 		{
-			name: "user not found when renewal token",
+			name:   "session not found then return error",
+			header: headerReq,
+			body:   bodyReq,
 			initMock: func() {
-				accessor.userRepo.EXPECT().GetByID(gomock.Any(), gomock.Any()).
-					Return(entity.User{}, errors.New("user not found"))
+				accessor.sessionRepo.EXPECT().GetBySessionId(gomock.Any(), gomock.Any()).Return(nil, errors.New("session not found"))
 			},
 			assertion: func(a dto.Authorization, err error) {
 				assert.Error(t, err)
 			},
 		},
 		{
-			name: "success renewal token",
+			name:   "user id is not match then return error",
+			header: headerReq,
+			body:   bodyReq,
 			initMock: func() {
-				accessor.userRepo.EXPECT().GetByID(gomock.Any(), gomock.Any()).
-					Return(entity.User{
-						ID:   1,
-						Role: "user",
-					}, nil)
+				accessor.sessionRepo.EXPECT().GetBySessionId(gomock.Any(), gomock.Any()).Return(&entity.SessionWithUser{
+					ID:     uuid.New(),
+					UserID: 2,
+				}, nil)
 			},
 			assertion: func(a dto.Authorization, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name:   "refresh token is not match",
+			header: headerReq,
+			body:   bodyReq,
+			initMock: func() {
+				accessor.sessionRepo.EXPECT().GetBySessionId(gomock.Any(), gomock.Any()).Return(&entity.SessionWithUser{
+					ID:           uuid.New(),
+					UserID:       1,
+					RefreshToken: mockHash("foobar", 8),
+				}, nil)
+			},
+			assertion: func(a dto.Authorization, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name:   "rotate token failed then return error",
+			header: headerReq,
+			body:   bodyReq,
+			initMock: func() {
+				accessor.sessionRepo.EXPECT().GetBySessionId(gomock.Any(), gomock.Any()).Return(&entity.SessionWithUser{
+					ID:           uuid.New(),
+					UserID:       1,
+					RefreshToken: mockHash(bodyReq.RefreshToken, 8),
+				}, nil)
+				accessor.sessionRepo.EXPECT().RotateToken(gomock.Any(), gomock.Any()).Return(nil, errors.New(""))
+			},
+			assertion: func(a dto.Authorization, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name:   "success rotate token",
+			header: headerReq,
+			body:   bodyReq,
+			initMock: func() {
+				accessor.sessionRepo.EXPECT().GetBySessionId(gomock.Any(), gomock.Any()).Return(&entity.SessionWithUser{
+					ID:           uuid.New(),
+					UserID:       1,
+					RefreshToken: mockHash(bodyReq.RefreshToken, 8),
+				}, nil)
+				accessor.sessionRepo.EXPECT().RotateToken(gomock.Any(), gomock.Any()).Return(&entity.Session{
+					ID: uuid.New(),
+				}, nil)
+			},
+			assertion: func(a dto.Authorization, err error) {
+				assert.NotEmpty(t, a.AccessToken)
+				assert.NotEmpty(t, a.RefreshToken)
 				assert.NoError(t, err)
 			},
 		},
@@ -335,7 +474,7 @@ func TestRenewalToken(t *testing.T) {
 	}
 }
 
-func mockHashPassword(password string, salt int) string {
+func mockHash(password string, salt int) string {
 	result, _ := bcrypt.GenerateFromPassword([]byte(password), salt)
 	return string(result)
 }
