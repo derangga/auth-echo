@@ -9,9 +9,12 @@ import (
 	"auth-echo/server/config"
 	"auth-echo/server/middleware"
 	"auth-echo/usecase"
+	"fmt"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -37,6 +40,14 @@ func provideSessionRepository(db *sqlx.DB) repository.SessionRepository {
 
 func provideLoginDeviceRepository(db *sqlx.DB) repository.LoginDevicesRepository {
 	return repository.NewLoginDeviceRepository(db)
+}
+
+func providePrometheusHistogram(config config.ApplicationConfig) *prometheus.HistogramVec {
+	return promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    config.Service,
+		Help:    fmt.Sprintf("Histogram of %s request duration.", config.Service),
+		Buckets: prometheus.LinearBuckets(1, 1, 10), // Adjust bucket sizes as needed
+	}, []string{"path", "method", "status"})
 }
 
 func provideAuthUsecase(
@@ -83,11 +94,13 @@ func provideHttpServer(
 	config *config.Config,
 	handlers handler.Handlers,
 	jwtAuth *middleware.JWTAuth,
+	promHistogram *prometheus.HistogramVec,
 ) server.HttpServer {
 	return server.NewHttpServer(
 		config,
 		handlers,
 		jwtAuth,
+		promHistogram,
 	)
 }
 
@@ -95,6 +108,7 @@ func InitHttpServer(config *config.Config) server.HttpServer {
 	database := provideDB(config.DatabaseConfig)
 	redisClient := provideRedisClient(config.RedisConfig)
 	validator := provideValidator()
+	prometheus := providePrometheusHistogram(config.ApplicationConfig)
 	jwtAuth := provideJWTAuth(&config.AuthConfig, redisClient)
 	userRepository := provideUserRepository(database)
 	sessionRepository := provideSessionRepository(database)
@@ -109,7 +123,7 @@ func InitHttpServer(config *config.Config) server.HttpServer {
 	authHandler := provideAuthHandler(authUC, validator)
 	healthzHandler := provideHealthzHandler()
 	handlers := provideHandlers(authHandler, healthzHandler)
-	server := provideHttpServer(config, handlers, jwtAuth)
+	server := provideHttpServer(config, handlers, jwtAuth, prometheus)
 
 	return server
 }

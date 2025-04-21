@@ -14,6 +14,7 @@ var (
 )
 
 type ApplicationConfig struct {
+	Host    string
 	Port    string
 	Service string
 	Timeout time.Duration
@@ -67,6 +68,7 @@ func BuildConfig() *Config {
 		godotenv.Load(".env")
 
 		config.ApplicationConfig = ApplicationConfig{
+			Host:    helper.GetStringEnv("SERVICE_HOST", "127.0.0.1"),
 			Port:    helper.GetStringEnv("SERVICE_PORT", "8080"),
 			Service: helper.GetStringEnv("SERVICE_NAME", "echouser"),
 			Timeout: helper.GetDurationEnv("SERVICE_TIMEOUT", "30000ms"),

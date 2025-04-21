@@ -6,9 +6,11 @@ import (
 	"auth-echo/server/config"
 	"auth-echo/server/middleware"
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/labstack/echo/v4"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type HttpServer interface {
@@ -17,25 +19,28 @@ type HttpServer interface {
 }
 
 type Server struct {
-	echo    *echo.Echo
-	config  *config.Config
-	handler handler.Handlers
-	jwtAuth *middleware.JWTAuth
+	echo          *echo.Echo
+	config        *config.Config
+	handler       handler.Handlers
+	jwtAuth       *middleware.JWTAuth
+	promHistogram *prometheus.HistogramVec
 }
 
 func NewHttpServer(
 	config *config.Config,
 	handler handler.Handlers,
 	jwtAuth *middleware.JWTAuth,
+	promHistogram *prometheus.HistogramVec,
 ) HttpServer {
 	e := echo.New()
 	middleware.SetupGlobalMiddleware(e, config.ApplicationConfig)
 
 	srv := &Server{
-		echo:    e,
-		config:  config,
-		handler: handler,
-		jwtAuth: jwtAuth,
+		echo:          e,
+		config:        config,
+		handler:       handler,
+		jwtAuth:       jwtAuth,
+		promHistogram: promHistogram,
 	}
 
 	srv.connectCoreWithEcho()
@@ -43,7 +48,8 @@ func NewHttpServer(
 }
 
 func (s *Server) ListenAndServe() error {
-	return s.echo.Start("127.0.0.1:" + s.config.ApplicationConfig.Port)
+	serviceUrl := fmt.Sprintf("%s:%s", s.config.ApplicationConfig.Host, s.config.ApplicationConfig.Port)
+	return s.echo.Start(serviceUrl)
 }
 
 func (s *Server) Stop() {
@@ -55,5 +61,6 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) connectCoreWithEcho() {
-	routes.RegisterRoute(s.echo, s.handler, s.jwtAuth)
+	appRoutes := routes.NewRoutes(s.echo, s.handler, s.jwtAuth, s.promHistogram)
+	appRoutes.RegisterRoute()
 }
