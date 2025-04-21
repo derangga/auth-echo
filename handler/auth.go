@@ -83,7 +83,7 @@ func (h AuthHandler) Register(c echo.Context) error {
 	// validate body request
 	err = h.validator.Struct(req)
 	if err != nil {
-		return responder.ResponseBadRequest(c, "register membutuhkan name, username, email, password")
+		return responder.ResponseBadRequest(c, "register needs name, username, email, password")
 	}
 
 	err = h.authUC.Register(c.Request().Context(), req)

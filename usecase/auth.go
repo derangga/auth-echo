@@ -92,7 +92,7 @@ func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorizat
 
 	if err = uc.validateHash(user.Password, cred.Password); err != nil {
 		log.Errorf("AuthUsecase.validateHash: %w", err)
-		return dto.Authorization{}, uc.errorUnprocessable("password tidak valid")
+		return dto.Authorization{}, uc.errorUnprocessable("please use correct credential")
 	}
 
 	// create session
