@@ -1,13 +1,15 @@
 package handler
 
 type Handlers struct {
-	AuthHandler AuthHandler
-	HealthzHandler HealthzHandler
+	AuthHandler         AuthHandler
+	NotificationHandler NotificationHandler
+	HealthzHandler      HealthzHandler
 }
 
-func NewHandlers(authHandler AuthHandler, healthzHandler HealthzHandler) Handlers {
+func NewHandlers(authHandler AuthHandler, notificationHandler NotificationHandler, healthzHandler HealthzHandler) Handlers {
 	return Handlers{
-		AuthHandler: authHandler,
-		HealthzHandler: healthzHandler,
+		AuthHandler:         authHandler,
+		NotificationHandler: notificationHandler,
+		HealthzHandler:      healthzHandler,
 	}
 }

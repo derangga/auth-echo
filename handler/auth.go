@@ -8,6 +8,7 @@ import (
 	"auth-echo/model/requests"
 	"auth-echo/model/serializer"
 	"auth-echo/usecase"
+	"fmt"
 	"net"
 
 	"github.com/go-playground/validator/v10"
@@ -56,12 +57,14 @@ func (h AuthHandler) Login(c echo.Context) error {
 		log.Errorf("AuthHandler.getIpAddr: %w", err)
 		return responder.ResponseBadRequest(c, "")
 	}
+
+	fmt.Println("user ip addr: ", ipAddress)
 	loginDTO := dto.Login{
 		Username:       req.Username,
 		Password:       req.Password,
 		DeviceIdentity: deviceId,
 		UserAgent:      userAgent,
-		IPAddress:      net.IP(ipAddress),
+		IPAddress:      ipAddress,
 	}
 
 	// proceed to usecase

@@ -2,11 +2,14 @@ package usecase
 
 import (
 	customerror "auth-echo/lib/custom_error"
+	"auth-echo/lib/rabbitmq"
 	"auth-echo/lib/secret"
 	"auth-echo/utils"
+	"encoding/json"
 
 	"auth-echo/model/dto"
 	"auth-echo/model/entity"
+	"auth-echo/model/queue"
 	"auth-echo/model/requests"
 	"auth-echo/repository"
 	"auth-echo/server/config"
@@ -21,31 +24,32 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/gommon/log"
 	"github.com/lib/pq"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type authUsecase struct {
-	config          config.AuthConfig
-	redisClient     *redis.Client
-	userRepo        repository.UserRepository
-	sessionRepo     repository.SessionRepository
-	loginDeviceRepo repository.LoginDevicesRepository
+	config      config.AuthConfig
+	redisClient *redis.Client
+	rabbitMqCh  rabbitmq.RabbitMQChannel
+	userRepo    repository.UserRepository
+	sessionRepo repository.SessionRepository
 }
 
 func NewAuthUsecase(
 	config config.AuthConfig,
 	redisClient *redis.Client,
+	rabbitMqCh rabbitmq.RabbitMQChannel,
 	userRepo repository.UserRepository,
 	sessionRepo repository.SessionRepository,
-	loginDeviceRepo repository.LoginDevicesRepository,
 ) AuthUsecase {
 	return authUsecase{
-		config:          config,
-		redisClient:     redisClient,
-		userRepo:        userRepo,
-		sessionRepo:     sessionRepo,
-		loginDeviceRepo: loginDeviceRepo,
+		config:      config,
+		redisClient: redisClient,
+		rabbitMqCh:  rabbitMqCh,
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
 	}
 }
 
@@ -114,31 +118,44 @@ func (uc authUsecase) Login(ctx context.Context, cred dto.Login) (dto.Authorizat
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
-	// upsert log device login
-	loginDevice, err := uc.loginDeviceRepo.GetByDeviceId(ctx, cred.DeviceIdentity)
+	logDevice := queue.LogDeviceLogin{
+		UserID:         user.ID,
+		DeviceIdentity: cred.DeviceIdentity,
+		SessionId:      session.ID.String(),
+		IPAddress:      cred.IPAddress,
+		UserAgent:      cred.UserAgent,
+	}
+	logDeviceBody, err := json.Marshal(logDevice)
 	if err != nil {
-		log.Errorf("AuthUsecase.getDeviceById: %w", err)
+		log.Errorf("AuthUsecase.jsonMarshal: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
 	}
 
-	if loginDevice == nil {
-		err = uc.loginDeviceRepo.Create(ctx, &entity.UserLoginDevice{
-			UserID:         user.ID,
-			SessionId:      session.ID,
-			DeviceIdentity: cred.DeviceIdentity,
-			IPAddress:      cred.IPAddress,
-			UserAgent:      cred.UserAgent,
-			LastLoginAt:    time.Now(),
-		})
-	} else {
-		loginDevice.SessionId = session.ID
-		loginDevice.UserAgent = cred.UserAgent
-		loginDevice.IPAddress = cred.IPAddress
-		err = uc.loginDeviceRepo.UpdateLastLogin(ctx, *loginDevice)
-	}
+	err = uc.rabbitMqCh.Publish("", rabbitmq.LOG_USER_LOGIN, false, false, amqp.Publishing{
+		ContentType: "application/json",
+		Body:        logDeviceBody,
+	})
 	if err != nil {
-		log.Errorf("AuthUsecase.upsertLoginDevice: %w", err)
+		log.Errorf("AuthUsecase.publish: %w", err)
 		return dto.Authorization{}, uc.errorUnprocessable("")
+	}
+
+	notifyOtherDevice := queue.NotifyUserOtherDevice{
+		UserID:                user.ID,
+		CurrentDeviceIdentity: cred.DeviceIdentity,
+		IPAddress:             cred.IPAddress,
+	}
+	notifyOtherDeviceBody, err := json.Marshal(notifyOtherDevice)
+	if err != nil {
+		log.Errorf("AuthUsecase.jsonMarshal: %w", err)
+	}
+
+	err = uc.rabbitMqCh.Publish("", rabbitmq.NOTIFY_USER_LOGIN, false, false, amqp.Publishing{
+		ContentType: "application/json",
+		Body:        notifyOtherDeviceBody,
+	})
+	if err != nil {
+		log.Errorf("AuthUsecase.publish: %w", err)
 	}
 
 	accessToken, err := secret.ConstructJWT(secret.JWTPayload{

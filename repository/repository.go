@@ -26,3 +26,15 @@ type LoginDevicesRepository interface {
 	UpdateLastLogin(ctx context.Context, loginDevice entity.UserLoginDevice) error
 	GetByDeviceId(ctx context.Context, deviceIdentity string) (*entity.UserLoginDevice, error)
 }
+
+type NotificationRepository interface {
+	Create(ctx context.Context, notification entity.Notification) error
+}
+
+type FcmDeviceRepository interface {
+	Create(ctx context.Context, fcmDevice entity.FcmDevice) error
+	Update(ctx context.Context, deviceId string, token string) error
+	GetByUserAndDeviceId(ctx context.Context, userId int, deviceId string) (*entity.FcmDevice, error)
+	GetByUserId(ctx context.Context, userId int) ([]entity.FcmDevice, error)
+	GetByUserIdAndExcludeDeviceId(ctx context.Context, userId int, deviceId string) ([]entity.FcmDevice, error)
+}

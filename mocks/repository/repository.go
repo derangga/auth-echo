@@ -242,3 +242,136 @@ func (mr *MockLoginDevicesRepositoryMockRecorder) UpdateLastLogin(ctx, loginDevi
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastLogin", reflect.TypeOf((*MockLoginDevicesRepository)(nil).UpdateLastLogin), ctx, loginDevice)
 }
+
+// MockNotificationRepository is a mock of NotificationRepository interface.
+type MockNotificationRepository struct {
+	ctrl     *gomock.Controller
+	recorder *MockNotificationRepositoryMockRecorder
+}
+
+// MockNotificationRepositoryMockRecorder is the mock recorder for MockNotificationRepository.
+type MockNotificationRepositoryMockRecorder struct {
+	mock *MockNotificationRepository
+}
+
+// NewMockNotificationRepository creates a new mock instance.
+func NewMockNotificationRepository(ctrl *gomock.Controller) *MockNotificationRepository {
+	mock := &MockNotificationRepository{ctrl: ctrl}
+	mock.recorder = &MockNotificationRepositoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNotificationRepository) EXPECT() *MockNotificationRepositoryMockRecorder {
+	return m.recorder
+}
+
+// Create mocks base method.
+func (m *MockNotificationRepository) Create(ctx context.Context, notification entity.Notification) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, notification)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockNotificationRepositoryMockRecorder) Create(ctx, notification interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockNotificationRepository)(nil).Create), ctx, notification)
+}
+
+// MockFcmDeviceRepository is a mock of FcmDeviceRepository interface.
+type MockFcmDeviceRepository struct {
+	ctrl     *gomock.Controller
+	recorder *MockFcmDeviceRepositoryMockRecorder
+}
+
+// MockFcmDeviceRepositoryMockRecorder is the mock recorder for MockFcmDeviceRepository.
+type MockFcmDeviceRepositoryMockRecorder struct {
+	mock *MockFcmDeviceRepository
+}
+
+// NewMockFcmDeviceRepository creates a new mock instance.
+func NewMockFcmDeviceRepository(ctrl *gomock.Controller) *MockFcmDeviceRepository {
+	mock := &MockFcmDeviceRepository{ctrl: ctrl}
+	mock.recorder = &MockFcmDeviceRepositoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFcmDeviceRepository) EXPECT() *MockFcmDeviceRepositoryMockRecorder {
+	return m.recorder
+}
+
+// Create mocks base method.
+func (m *MockFcmDeviceRepository) Create(ctx context.Context, fcmDevice entity.FcmDevice) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, fcmDevice)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockFcmDeviceRepositoryMockRecorder) Create(ctx, fcmDevice interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockFcmDeviceRepository)(nil).Create), ctx, fcmDevice)
+}
+
+// GetByUserAndDeviceId mocks base method.
+func (m *MockFcmDeviceRepository) GetByUserAndDeviceId(ctx context.Context, userId int, deviceId string) (*entity.FcmDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByUserAndDeviceId", ctx, userId, deviceId)
+	ret0, _ := ret[0].(*entity.FcmDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByUserAndDeviceId indicates an expected call of GetByUserAndDeviceId.
+func (mr *MockFcmDeviceRepositoryMockRecorder) GetByUserAndDeviceId(ctx, userId, deviceId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUserAndDeviceId", reflect.TypeOf((*MockFcmDeviceRepository)(nil).GetByUserAndDeviceId), ctx, userId, deviceId)
+}
+
+// GetByUserId mocks base method.
+func (m *MockFcmDeviceRepository) GetByUserId(ctx context.Context, userId int) ([]entity.FcmDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByUserId", ctx, userId)
+	ret0, _ := ret[0].([]entity.FcmDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByUserId indicates an expected call of GetByUserId.
+func (mr *MockFcmDeviceRepositoryMockRecorder) GetByUserId(ctx, userId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUserId", reflect.TypeOf((*MockFcmDeviceRepository)(nil).GetByUserId), ctx, userId)
+}
+
+// GetByUserIdAndExcludeDeviceId mocks base method.
+func (m *MockFcmDeviceRepository) GetByUserIdAndExcludeDeviceId(ctx context.Context, userId int, deviceId string) ([]entity.FcmDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByUserIdAndExcludeDeviceId", ctx, userId, deviceId)
+	ret0, _ := ret[0].([]entity.FcmDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByUserIdAndExcludeDeviceId indicates an expected call of GetByUserIdAndExcludeDeviceId.
+func (mr *MockFcmDeviceRepositoryMockRecorder) GetByUserIdAndExcludeDeviceId(ctx, userId, deviceId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUserIdAndExcludeDeviceId", reflect.TypeOf((*MockFcmDeviceRepository)(nil).GetByUserIdAndExcludeDeviceId), ctx, userId, deviceId)
+}
+
+// Update mocks base method.
+func (m *MockFcmDeviceRepository) Update(ctx context.Context, deviceId, token string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", ctx, deviceId, token)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockFcmDeviceRepositoryMockRecorder) Update(ctx, deviceId, token interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockFcmDeviceRepository)(nil).Update), ctx, deviceId, token)
+}

@@ -9,7 +9,11 @@ migrate_down:
 run_api:
 	go run app/api/main.go
 
+run_consumer:
+	go run app/consumer/main/main.go
+
 mocks_gen:
+	mockgen -source=lib/rabbitmq/queue.go -destination=mocks/lib/rabbitmq/queue.go
 	mockgen -source=usecase/usecase.go -destination=mocks/usecase/usecase.go
 	mockgen -source=repository/repository.go -destination=mocks/repository/repository.go
 
