@@ -45,6 +45,13 @@ type RedisConfig struct {
 	WriteTimeout time.Duration
 }
 
+type RabbitMQConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+}
+
 // AuthConfig holds the configuration for auth
 type AuthConfig struct {
 	JWTSecret          string
@@ -59,6 +66,7 @@ type Config struct {
 	DatabaseConfig    DatabaseConfig
 	RedisConfig       RedisConfig
 	AuthConfig        AuthConfig
+	RabbitMQConfig    RabbitMQConfig
 }
 
 func BuildConfig() *Config {
@@ -105,6 +113,13 @@ func BuildConfig() *Config {
 			RefreshTokenSecret: helper.GetStringEnv("REFRESH_TOKEN_SECRET", ""),
 			RefreshDuration:    helper.GetDurationEnv("REFRESH_VALID_DURATION", ""),
 			BcryptSalt:         helper.GetIntEnv("BCRYPT_SALT", 0),
+		}
+
+		config.RabbitMQConfig = RabbitMQConfig{
+			Host:     helper.GetStringEnv("RABBITMQ_HOST", "localhost"),
+			Port:     helper.GetStringEnv("RABBITMQ_PORT", "5672"),
+			User:     helper.GetStringEnv("RABBITMQ_DEFAULT_USER", ""),
+			Password: helper.GetStringEnv("RABBITMQ_DEFAULT_PASS", ""),
 		}
 	})
 

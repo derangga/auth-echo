@@ -1,6 +1,7 @@
 package usecase_test
 
 import (
+	mock_rabbitmq "auth-echo/mocks/lib/rabbitmq"
 	mock_repository "auth-echo/mocks/repository"
 	"auth-echo/model/dto"
 	"auth-echo/model/entity"
@@ -9,7 +10,6 @@ import (
 	"auth-echo/usecase"
 	"context"
 	"errors"
-	"net"
 	"testing"
 	"time"
 
@@ -24,8 +24,8 @@ import (
 type AuthTestAccessor struct {
 	userRepo        *mock_repository.MockUserRepository
 	sessionRepo     *mock_repository.MockSessionRepository
-	loginDeviceRepo *mock_repository.MockLoginDevicesRepository
 	redisClientMock redismock.ClientMock
+	rabbitChMock    *mock_rabbitmq.MockRabbitMQChannel
 	authUC          usecase.AuthUsecase
 }
 
@@ -39,14 +39,14 @@ func newAuthTestAccessor(ctrl *gomock.Controller) AuthTestAccessor {
 	}
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	mockSessionRepo := mock_repository.NewMockSessionRepository(ctrl)
-	mockLoginDeviceRepo := mock_repository.NewMockLoginDevicesRepository(ctrl)
 	redisClient, mock := redismock.NewClientMock()
-	authUC := usecase.NewAuthUsecase(authConfig, redisClient, mockUserRepo, mockSessionRepo, mockLoginDeviceRepo)
+	rabbitChMock := mock_rabbitmq.NewMockRabbitMQChannel(ctrl)
+	authUC := usecase.NewAuthUsecase(authConfig, redisClient, rabbitChMock, mockUserRepo, mockSessionRepo)
 	return AuthTestAccessor{
 		userRepo:        mockUserRepo,
 		sessionRepo:     mockSessionRepo,
-		loginDeviceRepo: mockLoginDeviceRepo,
 		redisClientMock: mock,
+		rabbitChMock:    rabbitChMock,
 		authUC:          authUC,
 	}
 }
@@ -225,7 +225,7 @@ func TestLogin(t *testing.T) {
 		Username:       "testusername",
 		Password:       "testpassword",
 		DeviceIdentity: "abc-123-def",
-		IPAddress:      net.IP("127.0.0.1"),
+		IPAddress:      "127.0.0.1",
 		UserAgent:      "Android",
 	}
 	mockUser := entity.User{
@@ -280,7 +280,7 @@ func TestLogin(t *testing.T) {
 			},
 		},
 		{
-			name:       "failed get login device info then return unprocessible",
+			name:       "failed publish log device event then return unprocessible",
 			credential: cred,
 			initMock: func() {
 				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
@@ -289,14 +289,16 @@ func TestLogin(t *testing.T) {
 					UserID:      1,
 					TokenFamily: uuid.New(),
 				}, nil)
-				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(nil, errors.New("failed get login atempt log"))
+				accessor.rabbitChMock.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					errors.New("failed publish"),
+				)
 			},
 			assertion: func(a dto.Authorization, err error) {
 				assert.Error(t, err)
 			},
 		},
 		{
-			name:       "failed create login device info then return unprocessible",
+			name:       "failed publish notification should return success",
 			credential: cred,
 			initMock: func() {
 				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
@@ -305,30 +307,13 @@ func TestLogin(t *testing.T) {
 					UserID:      1,
 					TokenFamily: uuid.New(),
 				}, nil)
-				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(nil, nil)
-				accessor.loginDeviceRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(errors.New("failed create log"))
+				accessor.rabbitChMock.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				accessor.rabbitChMock.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(
+					errors.New("failed publish"),
+				)
 			},
 			assertion: func(a dto.Authorization, err error) {
-				assert.Error(t, err)
-			},
-		},
-		{
-			name:       "failed update login device info then return unprocessible",
-			credential: cred,
-			initMock: func() {
-				accessor.userRepo.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).Return(mockUser, nil)
-				accessor.sessionRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&entity.Session{
-					ID:          uuid.New(),
-					UserID:      1,
-					TokenFamily: uuid.New(),
-				}, nil)
-				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(&entity.UserLoginDevice{
-					ID: 1,
-				}, nil)
-				accessor.loginDeviceRepo.EXPECT().UpdateLastLogin(gomock.Any(), gomock.Any()).Return(errors.New("failed create log"))
-			},
-			assertion: func(a dto.Authorization, err error) {
-				assert.Error(t, err)
+				assert.NoError(t, err)
 			},
 		},
 		{
@@ -341,8 +326,8 @@ func TestLogin(t *testing.T) {
 					UserID:      1,
 					TokenFamily: uuid.New(),
 				}, nil)
-				accessor.loginDeviceRepo.EXPECT().GetByDeviceId(gomock.Any(), gomock.Any()).Return(nil, nil)
-				accessor.loginDeviceRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
+				accessor.rabbitChMock.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				accessor.rabbitChMock.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			},
 			assertion: func(a dto.Authorization, err error) {
 				assert.NotEmpty(t, a.AccessToken)

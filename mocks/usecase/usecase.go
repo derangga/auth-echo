@@ -7,6 +7,7 @@ package mock_usecase
 import (
 	secret "auth-echo/lib/secret"
 	dto "auth-echo/model/dto"
+	queue "auth-echo/model/queue"
 	requests "auth-echo/model/requests"
 	context "context"
 	reflect "reflect"
@@ -93,4 +94,106 @@ func (m *MockAuthUsecase) RenewalToken(ctx context.Context, header requests.Refr
 func (mr *MockAuthUsecaseMockRecorder) RenewalToken(ctx, header, body interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewalToken", reflect.TypeOf((*MockAuthUsecase)(nil).RenewalToken), ctx, header, body)
+}
+
+// MockAuthLoggerUsecase is a mock of AuthLoggerUsecase interface.
+type MockAuthLoggerUsecase struct {
+	ctrl     *gomock.Controller
+	recorder *MockAuthLoggerUsecaseMockRecorder
+}
+
+// MockAuthLoggerUsecaseMockRecorder is the mock recorder for MockAuthLoggerUsecase.
+type MockAuthLoggerUsecaseMockRecorder struct {
+	mock *MockAuthLoggerUsecase
+}
+
+// NewMockAuthLoggerUsecase creates a new mock instance.
+func NewMockAuthLoggerUsecase(ctrl *gomock.Controller) *MockAuthLoggerUsecase {
+	mock := &MockAuthLoggerUsecase{ctrl: ctrl}
+	mock.recorder = &MockAuthLoggerUsecaseMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAuthLoggerUsecase) EXPECT() *MockAuthLoggerUsecaseMockRecorder {
+	return m.recorder
+}
+
+// LogLoginDevice mocks base method.
+func (m *MockAuthLoggerUsecase) LogLoginDevice(ctx context.Context, queueReq queue.LogDeviceLogin) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LogLoginDevice", ctx, queueReq)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// LogLoginDevice indicates an expected call of LogLoginDevice.
+func (mr *MockAuthLoggerUsecaseMockRecorder) LogLoginDevice(ctx, queueReq interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogLoginDevice", reflect.TypeOf((*MockAuthLoggerUsecase)(nil).LogLoginDevice), ctx, queueReq)
+}
+
+// MockNotificationUsecase is a mock of NotificationUsecase interface.
+type MockNotificationUsecase struct {
+	ctrl     *gomock.Controller
+	recorder *MockNotificationUsecaseMockRecorder
+}
+
+// MockNotificationUsecaseMockRecorder is the mock recorder for MockNotificationUsecase.
+type MockNotificationUsecaseMockRecorder struct {
+	mock *MockNotificationUsecase
+}
+
+// NewMockNotificationUsecase creates a new mock instance.
+func NewMockNotificationUsecase(ctrl *gomock.Controller) *MockNotificationUsecase {
+	mock := &MockNotificationUsecase{ctrl: ctrl}
+	mock.recorder = &MockNotificationUsecaseMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNotificationUsecase) EXPECT() *MockNotificationUsecaseMockRecorder {
+	return m.recorder
+}
+
+// NotifyNewDeviceLogin mocks base method.
+func (m *MockNotificationUsecase) NotifyNewDeviceLogin(ctx context.Context, queueReq queue.NotifyUserOtherDevice) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NotifyNewDeviceLogin", ctx, queueReq)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// NotifyNewDeviceLogin indicates an expected call of NotifyNewDeviceLogin.
+func (mr *MockNotificationUsecaseMockRecorder) NotifyNewDeviceLogin(ctx, queueReq interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewDeviceLogin", reflect.TypeOf((*MockNotificationUsecase)(nil).NotifyNewDeviceLogin), ctx, queueReq)
+}
+
+// RegisterFcmDevice mocks base method.
+func (m *MockNotificationUsecase) RegisterFcmDevice(ctx context.Context, req requests.FcmDevice) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterFcmDevice", ctx, req)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegisterFcmDevice indicates an expected call of RegisterFcmDevice.
+func (mr *MockNotificationUsecaseMockRecorder) RegisterFcmDevice(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterFcmDevice", reflect.TypeOf((*MockNotificationUsecase)(nil).RegisterFcmDevice), ctx, req)
+}
+
+// SendNotification mocks base method.
+func (m *MockNotificationUsecase) SendNotification(ctx context.Context, notification requests.Notification) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendNotification", ctx, notification)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendNotification indicates an expected call of SendNotification.
+func (mr *MockNotificationUsecaseMockRecorder) SendNotification(ctx, notification interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendNotification", reflect.TypeOf((*MockNotificationUsecase)(nil).SendNotification), ctx, notification)
 }

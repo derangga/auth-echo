@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS user_login_devices (
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     session_id UUID NOT NULL REFERENCES user_sessions(id) ON DELETE CASCADE,
     device_identity UUID NOT NULL,
-    ip_address INET NOT NULL,
+    ip_address VARCHAR(50) NOT NULL,
     user_agent TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_login_at TIMESTAMPTZ NOT NULL

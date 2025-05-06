@@ -40,11 +40,15 @@ func (r AppRoutes) RegisterRoute() {
 
 	r.registerRoute(r.echo, http.MethodGet, "/metrics", echo.WrapHandler(promhttp.Handler()))
 
-	authGroup := r.echo.Group("/auth")
+	authGroup := r.echo.Group("/api/auth")
 	r.registerGroupRoute(authGroup, http.MethodPost, "/login", h.AuthHandler.Login)
 	r.registerGroupRoute(authGroup, http.MethodPost, "/register", h.AuthHandler.Register)
 	r.registerGroupRoute(authGroup, http.MethodPost, "/logout", h.AuthHandler.Logout, userMid)
 	r.registerGroupRoute(authGroup, http.MethodPost, "/refresh", h.AuthHandler.RenewalToken, reAuthMid)
+
+	notifGroup := r.echo.Group("/api/notifications")
+	r.registerGroupRoute(notifGroup, http.MethodPost, "/devices", h.NotificationHandler.RegisterFcmDevice, userMid)
+	r.registerGroupRoute(notifGroup, http.MethodPost, "/sends", h.NotificationHandler.SendNotification, userMid)
 
 	r.registerRoute(r.echo, http.MethodGet, "/healtz", h.HealthzHandler.Healthz, userMid)
 }
